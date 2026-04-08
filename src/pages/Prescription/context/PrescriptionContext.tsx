@@ -3,17 +3,18 @@ import type { ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import type {
-  Vitals, Symptom, Diagnosis, Medication, LabInvestigation,
+  Vitals, VitalField, Symptom, Diagnosis, Medication, LabInvestigation,
   LabResult, ExaminationFinding, ProcedureEntry, FollowUp,
   Referral, CustomSection, PrescriptionLanguage, Patient,
   DropdownOptions, PrescriptionTemplate, PatientInfo, PrescriptionVitals,
+  VitalUnitsMap,
 } from '@/types';
 import { prescriptionApi } from '@/services/api';
 import {
   fetchDropdownOptions, fetchConfiguration, fetchAllTemplates,
   fetchPatientDetail, fetchPrintSettingsData, savePrintSettingsData,
-  createSectionTemplate, deleteSectionTemplate, fetchSingleTemplate,
-  buildSubmitPayload, DEV_ORG, DEV_BRANCH, DEV_DOCTOR,
+  createSectionTemplate, updateSectionTemplate, deleteSectionTemplate, fetchSingleTemplate,
+  fetchVitalUnits, buildSubmitPayload, DEV_ORG, DEV_BRANCH, DEV_DOCTOR,
   type CollectedPrescriptionData,
 } from './prescriptionHelpers';
 
@@ -40,10 +41,10 @@ export interface MedicalCondition {
 }
 
 const DEFAULT_CONDITIONS: MedicalCondition[] = [
-  { name: 'Diabetes', value: '-' }, { name: 'Hypertension', value: '-' },
-  { name: 'Hypothyroidism', value: '-' }, { name: 'Heart Disease', value: '-' },
-  { name: 'Asthma', value: '-' }, { name: 'Allergies', value: '-' },
-  { name: 'Tobacco Use', value: '-' }, { name: 'Alcohol Use', value: '-' },
+  { name: 'Diabetes mellitus', value: '-' }, { name: 'Hypertension', value: '-' },
+  { name: 'Hypothyroidism', value: '-' }, { name: 'Alcohol', value: '-' },
+  { name: 'Tobacco', value: '-' }, { name: 'Tobacco (Chewing)', value: '-' },
+  { name: 'Smoking', value: '-' }, { name: 'Dustel 0.5Mg Tablet', value: '-' },
 ];
 
 // ─── State ───────────────────────────────────────────────────────────
@@ -79,6 +80,7 @@ export interface PrescriptionState {
   mainTemplates: PrescriptionTemplate[];
   patientInfo: PatientInfo | null;
   lockedVitals: PrescriptionVitals | null;
+  vitalUnits: VitalUnitsMap;
   printEnabledSections: Record<string, boolean>;
   essentialLoading: boolean;
   isFetchingPrescription: boolean;
@@ -94,6 +96,8 @@ export interface PrescriptionActions {
   setIsSaving: (saving: boolean) => void;
   setPrescriptionId: (id: string | null) => void;
   updateVitals: (vitals: Partial<Vitals>) => void;
+  setVitals: (vitals: Vitals) => void;
+  toggleVitalLock: (key: string) => void;
   addSymptom: (symptom: Symptom) => void;
   removeSymptom: (index: number) => void;
   updateSymptom: (index: number, symptom: Symptom) => void;
@@ -111,6 +115,7 @@ export interface PrescriptionActions {
   addLabResult: (result: LabResult) => void;
   removeLabResult: (index: number) => void;
   updateMedicalCondition: (index: number, condition: MedicalCondition) => void;
+  setMedicalConditions: (conditions: MedicalCondition[]) => void;
   setNoRelevantHistory: (value: boolean) => void;
   addProcedure: (procedure: ProcedureEntry) => void;
   removeProcedure: (index: number) => void;
@@ -133,6 +138,7 @@ export interface PrescriptionActions {
   updatePrescriptionApi: () => Promise<boolean>;
   clearAllPrescription: () => void;
   addTemplate: (name: string, type: string, items: Record<string, unknown>[]) => Promise<string | null>;
+  updateTemplate: (templateId: string, name: string, type: string, items: Record<string, unknown>[]) => Promise<boolean>;
   deleteTemplate: (templateId: string, templateType: string) => Promise<boolean>;
   applyTemplate: (templateId: string, type: string) => Promise<void>;
   getTemplatesByType: (type: string) => PrescriptionTemplate[];
@@ -161,7 +167,7 @@ const initialState: PrescriptionState = {
   advice: '', surgicalNotes: '', privateNotes: '', customSections: [],
   sectionConfig: { enabledSections: [...ALL_SECTIONS], sectionOrder: [...ALL_SECTIONS] },
   dropdownOptions: null, templates: [], mainTemplates: [],
-  patientInfo: null, lockedVitals: null,
+  patientInfo: null, lockedVitals: null, vitalUnits: {},
   printEnabledSections: {}, essentialLoading: true,
   isFetchingPrescription: false, copyToRxMode: false,
 };
@@ -180,11 +186,12 @@ export function PrescriptionProvider({ children }: { children: ReactNode }) {
     initRef.current = true;
 
     const init = async () => {
-      const [ddOpts, config, templates, printSettings] = await Promise.all([
+      const [ddOpts, config, templates, printSettings, vUnits] = await Promise.all([
         fetchDropdownOptions(),
         fetchConfiguration(),
         fetchAllTemplates(),
         fetchPrintSettingsData(),
+        fetchVitalUnits(),
       ]);
 
       setState(s => {
@@ -192,6 +199,7 @@ export function PrescriptionProvider({ children }: { children: ReactNode }) {
         if (ddOpts) updates.dropdownOptions = ddOpts;
         if (templates) updates.templates = templates;
         if (printSettings) updates.printEnabledSections = printSettings;
+        if (vUnits) updates.vitalUnits = vUnits;
         if (config) {
           const cfg = config as unknown as Record<string, unknown>;
           if (cfg.section_order && Array.isArray(cfg.section_order)) {
@@ -211,10 +219,12 @@ export function PrescriptionProvider({ children }: { children: ReactNode }) {
       // Fetch patient data if URL has patientId
       if (urlPatientId) {
         const patientData = await fetchPatientDetail(urlPatientId);
+        const lv = patientData?.lockedVitals || null;
         setState(s => ({
           ...s,
           patientInfo: patientData?.patientInfo || null,
-          lockedVitals: patientData?.lockedVitals || null,
+          lockedVitals: lv,
+          vitals: lv ? mapLockedVitalsToVitals(lv) : s.vitals,
           medicalConditions: patientData?.medicalHistory?.length
             ? mergeConditions(DEFAULT_CONDITIONS, patientData.medicalHistory)
             : [...DEFAULT_CONDITIONS],
@@ -252,6 +262,20 @@ export function PrescriptionProvider({ children }: { children: ReactNode }) {
       return { ...s, vitals: v };
     });
   }, []);
+  const setVitalsAction = useCallback((vitals: Vitals) => set('vitals', vitals), [set]);
+  const toggleVitalLock = useCallback((key: string) => {
+    setState(s => {
+      const field = s.vitals[key as keyof Vitals];
+      if (!field || typeof field === 'string') return s;
+      return {
+        ...s,
+        vitals: {
+          ...s.vitals,
+          [key]: { ...field, locked: !(field as VitalField).locked },
+        },
+      };
+    });
+  }, []);
 
   // ─── Array CRUD helpers ───────────────────────────────────────────
   const addItem = useCallback(<K extends keyof PrescriptionState>(key: K, item: unknown) => {
@@ -287,8 +311,14 @@ export function PrescriptionProvider({ children }: { children: ReactNode }) {
   const updateCustomSection = useCallback((i: number, s: CustomSection) => updateItem('customSections', i, s), [updateItem]);
 
   const updateMedicalCondition = useCallback((i: number, c: MedicalCondition) => {
-    setState(s => ({ ...s, medicalConditions: s.medicalConditions.map((mc, idx) => idx === i ? c : mc) }));
+    setState(s => {
+      if (i >= s.medicalConditions.length) {
+        return { ...s, medicalConditions: [...s.medicalConditions, c] };
+      }
+      return { ...s, medicalConditions: s.medicalConditions.map((mc, idx) => idx === i ? c : mc) };
+    });
   }, []);
+  const setMedicalConditions = useCallback((conditions: MedicalCondition[]) => set('medicalConditions', conditions), [set]);
   const setNoRelevantHistory = useCallback((v: boolean) => set('noRelevantHistory', v), [set]);
   const setFollowUp = useCallback((f: FollowUp | null) => set('followUp', f), [set]);
   const setReferral = useCallback((r: Referral | null) => set('referral', r), [set]);
@@ -389,6 +419,20 @@ export function PrescriptionProvider({ children }: { children: ReactNode }) {
     return id;
   }, []);
 
+  const updateTemplateAction = useCallback(async (templateId: string, name: string, type: string, items: Record<string, unknown>[]): Promise<boolean> => {
+    const ok = await updateSectionTemplate(templateId, name, type, items);
+    if (ok) {
+      setState(s => ({
+        ...s,
+        templates: s.templates.map(t =>
+          t.templateId === templateId ? { ...t, name, data: { items } } : t
+        ),
+      }));
+      toast.success(`Template "${name}" updated`);
+    }
+    return ok;
+  }, []);
+
   const deleteTemplateAction = useCallback(async (templateId: string, templateType: string): Promise<boolean> => {
     const ok = await deleteSectionTemplate(templateId, templateType);
     if (ok) {
@@ -450,14 +494,14 @@ export function PrescriptionProvider({ children }: { children: ReactNode }) {
   const value = useMemo<PrescriptionContextValue>(() => ({
     ...state,
     setPatient, setLanguage, setActiveSection, setIsEditing, setIsSaving, setPrescriptionId,
-    updateVitals,
+    updateVitals, setVitals: setVitalsAction, toggleVitalLock,
     addSymptom, removeSymptom, updateSymptom,
     addDiagnosis, removeDiagnosis, updateDiagnosis,
     addExaminationFinding, removeExaminationFinding,
     addMedication, removeMedication, updateMedication,
     addLabInvestigation, removeLabInvestigation, updateLabInvestigation,
     addLabResult, removeLabResult,
-    updateMedicalCondition, setNoRelevantHistory,
+    updateMedicalCondition, setMedicalConditions, setNoRelevantHistory,
     addProcedure, removeProcedure,
     setFollowUp, setReferral,
     setAdvice, setSurgicalNotes, setPrivateNotes,
@@ -465,14 +509,15 @@ export function PrescriptionProvider({ children }: { children: ReactNode }) {
     toggleSection, reorderSections,
     resetPrescription, loadPrescription, collectPayload,
     collectPrescriptionData, submitPrescription, updatePrescriptionApi,
-    clearAllPrescription, addTemplate, deleteTemplate: deleteTemplateAction,
+    clearAllPrescription, addTemplate, updateTemplate: updateTemplateAction,
+    deleteTemplate: deleteTemplateAction,
     applyTemplate, getTemplatesByType, savePrintSettings,
     reorderSymptoms, reorderMedications, reorderDiagnoses,
     reorderExaminationFindings, reorderLabInvestigations, reorderLabResults,
     reorderProcedures, reorderCustomSections, refreshPrintSettings,
   }), [
     state, setPatient, setLanguage, setActiveSection, setIsEditing, setIsSaving, setPrescriptionId,
-    updateVitals, addSymptom, removeSymptom, updateSymptom,
+    updateVitals, setVitalsAction, toggleVitalLock, addSymptom, removeSymptom, updateSymptom,
     addDiagnosis, removeDiagnosis, updateDiagnosis,
     addExaminationFinding, removeExaminationFinding,
     addMedication, removeMedication, updateMedication,
@@ -483,8 +528,8 @@ export function PrescriptionProvider({ children }: { children: ReactNode }) {
     addCustomSection, removeCustomSection, updateCustomSection,
     toggleSection, reorderSections, resetPrescription, loadPrescription, collectPayload,
     collectPrescriptionData, submitPrescription, updatePrescriptionApi,
-    clearAllPrescription, addTemplate, deleteTemplateAction,
-    applyTemplate, getTemplatesByType, savePrintSettings,
+    clearAllPrescription, addTemplate, updateTemplateAction,
+    deleteTemplateAction, applyTemplate, getTemplatesByType, savePrintSettings,
     reorderSymptoms, reorderMedications, reorderDiagnoses,
     reorderExaminationFindings, reorderLabInvestigations, reorderLabResults,
     reorderProcedures, reorderCustomSections, refreshPrintSettings,
@@ -500,6 +545,25 @@ export function usePrescription(): PrescriptionContextValue {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────
+function mapLockedVitalsToVitals(lv: PrescriptionVitals): Vitals {
+  const m = (v: { value: string; unit_id: number | null; locked: boolean } | undefined): VitalField => ({
+    value: v?.value || '', unit_id: v?.unit_id ?? undefined, locked: v?.locked || false,
+  });
+  return {
+    pulse: m(lv.pulse),
+    bp: { systolic: lv.bloodPressure?.value || '', diastolic: '', locked: lv.bloodPressure?.locked || false },
+    rr: lv.respiratoryRate?.value || '',
+    temp: m(lv.temperature),
+    height: m(lv.height),
+    weight: m(lv.muscleMass),
+    muscleMass: m(lv.muscleMass),
+    headCircumference: m(lv.headCircumference),
+    chestCircumference: m(lv.chestCircumference),
+    midArmCircumference: m(lv.midArmCircumference),
+    waistCircumference: m(lv.waistCircumference),
+  };
+}
+
 function mergeConditions(defaults: MedicalCondition[], loaded: MedicalCondition[]): MedicalCondition[] {
   const result = defaults.map(d => {
     const match = loaded.find(l => l.name.toLowerCase() === d.name.toLowerCase());

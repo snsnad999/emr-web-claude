@@ -16,8 +16,9 @@ import DescriptionIcon from '@mui/icons-material/Description';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import { toast } from 'sonner';
 import { usePrescription } from '../context/PrescriptionContext';
+import { resolveDropdownTranslated, resolveTextTranslated } from '../context/prescriptionHelpers';
 import PrescriptionPdf, { downloadPdfFromUrl } from './PrescriptionPdf';
-import type { DropdownOption } from '@/types';
+import type { DropdownOption, PrescriptionLanguage } from '@/types';
 
 interface PreviewModalProps {
   open: boolean;
@@ -25,9 +26,33 @@ interface PreviewModalProps {
   onFinish?: () => void;
 }
 
-function resolveDropdown(id: number | undefined | null, options: DropdownOption[] | undefined): string {
-  if (!id || !options) return '';
-  return options.find(o => o.dropdown_option_id === id)?.option_value || '';
+/**
+ * Resolve a dropdown value with translation support.
+ * Tries by ID first, then falls back to text-matching for translation.
+ */
+function resolveDropdown(
+  id: number | undefined | null,
+  options: DropdownOption[] | undefined,
+  lang: PrescriptionLanguage = 'en',
+  fallbackText?: string,
+): string {
+  // 1. Try by ID
+  const byId = resolveDropdownTranslated(id, options, lang);
+  if (byId) return byId;
+  // 2. If no ID match, try translating the fallback text by matching option_value
+  if (fallbackText) return resolveTextTranslated(fallbackText, options, lang);
+  return '';
+}
+
+const DIAGNOSIS_TYPE_TRANSLATIONS: Record<string, Record<string, string>> = {
+  Primary:      { hi: 'प्राथमिक',  mr: 'प्राथमिक' },
+  Secondary:    { hi: 'द्वितीयक',  mr: 'दुय्यम' },
+  Differential: { hi: 'विभेदक',    mr: 'विभेदक' },
+};
+
+function translateDiagnosisType(type: string, lang: PrescriptionLanguage): string {
+  if (lang === 'en') return type;
+  return DIAGNOSIS_TYPE_TRANSLATIONS[type]?.[lang] || type;
 }
 
 export default function PreviewModal({ open, onClose, onFinish }: PreviewModalProps) {
@@ -37,6 +62,7 @@ export default function PreviewModal({ open, onClose, onFinish }: PreviewModalPr
     noRelevantHistory, procedures, followUp, referral, advice,
     surgicalNotes, privateNotes, customSections,
     dropdownOptions, collectPrescriptionData, printEnabledSections,
+    language,
   } = usePrescription();
 
   const [viewMode, setViewMode] = useState<'summary' | 'pdf'>('summary');
@@ -58,7 +84,7 @@ export default function PreviewModal({ open, onClose, onFinish }: PreviewModalPr
     return collectPrescriptionData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    open,
+    open, language,
     // Use individual state values as deps instead of collectPrescriptionData (which changes on every state update)
     vitals, symptoms, diagnoses, examinationFindings, medications,
     labInvestigations, labResults, medicalConditions, noRelevantHistory,
@@ -151,6 +177,7 @@ export default function PreviewModal({ open, onClose, onFinish }: PreviewModalPr
               patientInfo={patientInfo}
               dropdownOptions={dropdownOptions}
               printSettings={printEnabledSections}
+              language={language}
               onPdfReady={handlePdfReady}
             />
           </Box>
@@ -206,8 +233,8 @@ export default function PreviewModal({ open, onClose, onFinish }: PreviewModalPr
               <Box sx={{ mb: 2.5 }}>
                 <Typography variant="subtitle2" fontWeight={700} gutterBottom color="primary">Chief Complaints</Typography>
                 {symptoms.map((s, i) => {
-                  const severity = resolveDropdown(s.severity_id, ddSym?.severity) || s.severity || '';
-                  const laterality = resolveDropdown(s.laterality_id, ddSym?.laterality) || s.laterality || '';
+                  const severity = resolveDropdown(s.severity_id, ddSym?.severity, language, s.severity) || '';
+                  const laterality = resolveDropdown(s.laterality_id, ddSym?.laterality, language, s.laterality) || '';
                   return (
                     <Typography key={i} variant="body2" sx={{ mb: 0.5 }}>
                       {i + 1}. <strong>{s.name}</strong>
@@ -231,9 +258,8 @@ export default function PreviewModal({ open, onClose, onFinish }: PreviewModalPr
                     <Typography variant="body2">
                       {i + 1}. <strong>{d.description}</strong>
                     </Typography>
-                    {(d.icdCode || d.icd_code) && <Chip label={d.icdCode || d.icd_code} size="small" color="info" sx={{ height: 20, fontSize: 11 }} />}
-                    <Chip label={d.status} size="small" variant="outlined" sx={{ height: 20, fontSize: 11 }} />
-                    {d.type && <Chip label={d.type} size="small" variant="outlined" sx={{ height: 20, fontSize: 11 }} />}
+                    <Chip label={resolveTextTranslated(d.status, dropdownOptions?.diagnosis?.status, language)} size="small" variant="outlined" sx={{ height: 20, fontSize: 11 }} />
+                    {d.type && <Chip label={translateDiagnosisType(d.type, language)} size="small" variant="outlined" sx={{ height: 20, fontSize: 11 }} />}
                   </Box>
                 ))}
                 <Divider sx={{ mt: 2 }} />
@@ -276,10 +302,10 @@ export default function PreviewModal({ open, onClose, onFinish }: PreviewModalPr
                           <strong>{m.brandName}</strong>
                           {m.genericName && <Typography variant="caption" color="text.secondary" display="block">{m.genericName}</Typography>}
                         </TableCell>
-                        <TableCell>{resolveDropdown(m.dosage_id, ddMed?.dosage) || m.dosage} {m.form}</TableCell>
-                        <TableCell>{resolveDropdown(m.frequency_id, ddMed?.frequency) || m.frequency}</TableCell>
-                        <TableCell>{resolveDropdown(m.timing_id, ddMed?.timing) || m.timing}</TableCell>
-                        <TableCell>{resolveDropdown(m.duration_id, ddMed?.duration) || m.duration}</TableCell>
+                        <TableCell>{resolveDropdown(m.dosage_id, ddMed?.dosage, language, m.dosage)}</TableCell>
+                        <TableCell>{resolveDropdown(m.frequency_id, ddMed?.frequency, language, m.frequency)}</TableCell>
+                        <TableCell>{resolveDropdown(m.timing_id, ddMed?.timing, language, m.timing)}</TableCell>
+                        <TableCell>{resolveDropdown(m.duration_id, ddMed?.duration, language, m.duration)}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -312,7 +338,8 @@ export default function PreviewModal({ open, onClose, onFinish }: PreviewModalPr
                   <TableHead>
                     <TableRow sx={{ bgcolor: '#f5f5f5' }}>
                       <TableCell sx={{ fontWeight: 600 }}>Test</TableCell>
-                      <TableCell sx={{ fontWeight: 600 }}>Result</TableCell>
+                      <TableCell sx={{ fontWeight: 600 }}>Reading</TableCell>
+                      <TableCell sx={{ fontWeight: 600 }}>Unit</TableCell>
                       <TableCell sx={{ fontWeight: 600 }}>Normal</TableCell>
                       <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
                     </TableRow>
@@ -321,11 +348,12 @@ export default function PreviewModal({ open, onClose, onFinish }: PreviewModalPr
                     {labResults.map((r, i) => (
                       <TableRow key={i}>
                         <TableCell>{r.testName}</TableCell>
-                        <TableCell><strong>{r.reading}</strong> {r.unit}</TableCell>
+                        <TableCell><strong>{r.reading}</strong></TableCell>
+                        <TableCell>{r.unit}</TableCell>
                         <TableCell>{r.normalRange}</TableCell>
                         <TableCell>
                           <Chip
-                            label={r.interpretation || 'Pending'}
+                            label={resolveTextTranslated(r.interpretation, dropdownOptions?.labresult?.interpretation, language) || 'Pending'}
                             size="small"
                             color={r.interpretation === 'Normal' ? 'success' : r.interpretation === 'Abnormal' ? 'error' : 'default'}
                             sx={{ height: 22 }}

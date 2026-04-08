@@ -1,3 +1,4 @@
+import { useState, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Drawer,
@@ -13,12 +14,21 @@ import {
   Tooltip,
   useMediaQuery,
   useTheme,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Button,
 } from '@mui/material';
+import {
+  Warning as WarningIcon,
+} from '@mui/icons-material';
 import {
   Dashboard as DashboardIcon,
   People as PeopleIcon,
   BarChart as BarChartIcon,
   Payment as PaymentIcon,
+  Person as PersonIcon,
   ChevronLeft as ChevronLeftIcon,
   LocalHospital as ClinicIcon,
 } from '@mui/icons-material';
@@ -34,6 +44,7 @@ const navItems = [
   { label: 'Patients', icon: <PeopleIcon />, path: '/patients' },
   { label: 'Analytics', icon: <BarChartIcon />, path: '/analytics' },
   { label: 'Payments', icon: <PaymentIcon />, path: '/payments' },
+  { label: 'Profile', icon: <PersonIcon />, path: '/profile' },
 ];
 
 const MotionBox = motion.create(Box);
@@ -45,6 +56,26 @@ export default function Sidebar() {
   const { sidebarOpen, toggleSidebar, setSidebarOpen } = useAppContext();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+
+  // Navigation guard for bulk import
+  const [guardDialog, setGuardDialog] = useState<{ open: boolean; targetPath: string }>({ open: false, targetPath: '' });
+
+  const handleNavigate = useCallback((path: string) => {
+    const isImportActive = (window as unknown as Record<string, unknown>).__bulkImportActive;
+    if (isImportActive) {
+      setGuardDialog({ open: true, targetPath: path });
+      return;
+    }
+    navigate(path);
+    if (isMobile) setSidebarOpen(false);
+  }, [navigate, isMobile, setSidebarOpen]);
+
+  const handleGuardConfirm = useCallback(() => {
+    (window as unknown as Record<string, unknown>).__bulkImportActive = false;
+    navigate(guardDialog.targetPath);
+    setGuardDialog({ open: false, targetPath: '' });
+    if (isMobile) setSidebarOpen(false);
+  }, [guardDialog.targetPath, navigate, isMobile, setSidebarOpen]);
 
   const drawerWidth = sidebarOpen ? DRAWER_WIDTH : DRAWER_WIDTH_COLLAPSED;
 
@@ -159,10 +190,7 @@ export default function Sidebar() {
               arrow
             >
               <ListItemButton
-                onClick={() => {
-                  navigate(item.path);
-                  if (isMobile) setSidebarOpen(false);
-                }}
+                onClick={() => handleNavigate(item.path)}
                 sx={{
                   borderRadius: 2,
                   mb: 0.5,
@@ -261,46 +289,74 @@ export default function Sidebar() {
     </Box>
   );
 
+  const guardDialogElement = (
+    <Dialog open={guardDialog.open} onClose={() => setGuardDialog({ open: false, targetPath: '' })} maxWidth="xs" fullWidth>
+      <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.5, pb: 1 }}>
+        <WarningIcon sx={{ color: 'warning.main', fontSize: 28 }} />
+        Leave this page?
+      </DialogTitle>
+      <DialogContent>
+        <Typography variant="body1">
+          You have an import in progress. Are you sure you want to leave? All data will be lost.
+        </Typography>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2.5 }}>
+        <Button onClick={() => setGuardDialog({ open: false, targetPath: '' })} color="inherit">
+          Stay
+        </Button>
+        <Button onClick={handleGuardConfirm} variant="contained" color="error">
+          Leave
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+
   // Mobile: temporary drawer
   if (isMobile) {
     return (
-      <Drawer
-        variant="temporary"
-        open={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
-        ModalProps={{ keepMounted: true }}
-        sx={{
-          '& .MuiDrawer-paper': {
-            width: DRAWER_WIDTH,
-            boxSizing: 'border-box',
-            border: 'none',
-          },
-        }}
-      >
-        {drawerContent}
-      </Drawer>
+      <>
+        <Drawer
+          variant="temporary"
+          open={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
+          ModalProps={{ keepMounted: true }}
+          sx={{
+            '& .MuiDrawer-paper': {
+              width: DRAWER_WIDTH,
+              boxSizing: 'border-box',
+              border: 'none',
+            },
+          }}
+        >
+          {drawerContent}
+        </Drawer>
+        {guardDialogElement}
+      </>
     );
   }
 
   // Desktop: permanent drawer with collapse
   return (
-    <Drawer
-      variant="permanent"
-      sx={{
-        width: drawerWidth,
-        flexShrink: 0,
-        transition: 'width 300ms cubic-bezier(0.4, 0, 0.2, 1)',
-        '& .MuiDrawer-paper': {
+    <>
+      <Drawer
+        variant="permanent"
+        sx={{
           width: drawerWidth,
-          boxSizing: 'border-box',
-          overflowX: 'hidden',
+          flexShrink: 0,
           transition: 'width 300ms cubic-bezier(0.4, 0, 0.2, 1)',
-          border: 'none',
-          boxShadow: '1px 0 8px rgba(0,0,0,0.04)',
-        },
-      }}
-    >
-      {drawerContent}
-    </Drawer>
+          '& .MuiDrawer-paper': {
+            width: drawerWidth,
+            boxSizing: 'border-box',
+            overflowX: 'hidden',
+            transition: 'width 300ms cubic-bezier(0.4, 0, 0.2, 1)',
+            border: 'none',
+            boxShadow: '1px 0 8px rgba(0,0,0,0.04)',
+          },
+        }}
+      >
+        {drawerContent}
+      </Drawer>
+      {guardDialogElement}
+    </>
   );
 }

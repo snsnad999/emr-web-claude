@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
   Box, Tabs, Tab, Typography, Chip, IconButton, Menu, MenuItem,
-  ListItemText, Tooltip, Badge, alpha,
+  ListItemText, Tooltip, Badge, alpha, TextField, InputAdornment,
 } from '@mui/material';
 import MonitorHeartIcon from '@mui/icons-material/MonitorHeart';
 import SickIcon from '@mui/icons-material/Sick';
@@ -21,6 +21,7 @@ import TuneIcon from '@mui/icons-material/Tune';
 import DescriptionIcon from '@mui/icons-material/Description';
 import EditIcon from '@mui/icons-material/Edit';
 import PhoneIcon from '@mui/icons-material/Phone';
+import SearchIcon from '@mui/icons-material/Search';
 import { usePrescription, type SectionId } from '../context/PrescriptionContext';
 import type { PatientInfo, PrescriptionTemplate } from '@/types';
 
@@ -50,6 +51,7 @@ interface SmallNavbarProps {
   mainTemplates?: PrescriptionTemplate[];
   onConfigurePad?: () => void;
   onApplyMainTemplate?: (templateId: string) => void;
+  onScrollToSection?: (sectionId: string) => void;
 }
 
 export default function SmallNavbar({
@@ -60,9 +62,11 @@ export default function SmallNavbar({
   mainTemplates = [],
   onConfigurePad,
   onApplyMainTemplate,
+  onScrollToSection,
 }: SmallNavbarProps) {
   const { activeSection, setActiveSection, sectionConfig } = usePrescription();
   const [templateAnchor, setTemplateAnchor] = useState<null | HTMLElement>(null);
+  const [templateSearch, setTemplateSearch] = useState('');
 
   const visibleSections = sectionConfig.sectionOrder.filter(
     s => sectionConfig.enabledSections.includes(s)
@@ -72,11 +76,25 @@ export default function SmallNavbar({
   const currentIndex = visibleSections.indexOf(activeSection);
   const safeIndex = currentIndex >= 0 ? currentIndex : 0;
 
-  // Handle tab change safely
+  // Filter templates by search term (client-side)
+  const filteredTemplates = useMemo(() => {
+    if (!templateSearch.trim()) return mainTemplates;
+    const q = templateSearch.toLowerCase();
+    return mainTemplates.filter(t => t.name.toLowerCase().includes(q));
+  }, [mainTemplates, templateSearch]);
+
+  // Handle tab change: update active section + smooth scroll
   const handleTabChange = (_: React.SyntheticEvent, newValue: number) => {
-    if (visibleSections[newValue]) {
-      setActiveSection(visibleSections[newValue] as SectionId);
+    const sectionId = visibleSections[newValue];
+    if (sectionId) {
+      setActiveSection(sectionId as SectionId);
+      onScrollToSection?.(sectionId);
     }
+  };
+
+  const handleTemplateClose = () => {
+    setTemplateAnchor(null);
+    setTemplateSearch('');
   };
 
   return (
@@ -144,22 +162,47 @@ export default function SmallNavbar({
         <Menu
           anchorEl={templateAnchor}
           open={Boolean(templateAnchor)}
-          onClose={() => setTemplateAnchor(null)}
+          onClose={handleTemplateClose}
           anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
           transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-          slotProps={{ paper: { sx: { minWidth: 200, maxHeight: 320 } } }}
+          slotProps={{ paper: { sx: { minWidth: 240, maxHeight: 380 } } }}
         >
-          {mainTemplates.length === 0 ? (
+          {/* Search filter */}
+          {mainTemplates.length > 3 && (
+            <Box sx={{ px: 1.5, py: 1 }}>
+              <TextField
+                size="small"
+                placeholder="Search templates..."
+                value={templateSearch}
+                onChange={(e) => setTemplateSearch(e.target.value)}
+                fullWidth
+                autoFocus
+                slotProps={{
+                  input: {
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <SearchIcon sx={{ fontSize: 18, color: 'text.disabled' }} />
+                      </InputAdornment>
+                    ),
+                    sx: { fontSize: 13 },
+                  },
+                }}
+                onClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => e.stopPropagation()}
+              />
+            </Box>
+          )}
+          {filteredTemplates.length === 0 ? (
             <MenuItem disabled>
-              <ListItemText secondary="No templates available" />
+              <ListItemText secondary={templateSearch ? 'No matching templates' : 'No templates available'} />
             </MenuItem>
           ) : (
-            mainTemplates.map((tmpl) => (
+            filteredTemplates.map((tmpl) => (
               <MenuItem
                 key={tmpl.templateId}
                 onClick={() => {
                   onApplyMainTemplate?.(tmpl.templateId);
-                  setTemplateAnchor(null);
+                  handleTemplateClose();
                 }}
               >
                 <ListItemText

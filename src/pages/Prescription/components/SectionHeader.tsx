@@ -11,6 +11,7 @@ import BookmarkBorderIcon from '@mui/icons-material/BookmarkBorder';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import SaveIcon from '@mui/icons-material/Save';
+import EditIcon from '@mui/icons-material/Edit';
 import type { SectionId } from '../context/PrescriptionContext';
 import { usePrescription } from '../context/PrescriptionContext';
 
@@ -23,6 +24,7 @@ interface SectionHeaderProps {
   defaultExpanded?: boolean;
   templateType?: string;
   onSaveTemplate?: (name: string) => void;
+  onUpdateTemplate?: (templateId: string, name: string) => void;
   templates?: Array<{ templateId: string; name: string }>;
   onApplyTemplate?: (templateId: string) => void;
   onDeleteTemplate?: (templateId: string) => void;
@@ -30,7 +32,7 @@ interface SectionHeaderProps {
 
 export default function SectionHeader({
   id, title, icon, itemCount, children, defaultExpanded = true,
-  templateType, onSaveTemplate, templates, onApplyTemplate, onDeleteTemplate,
+  templateType, onSaveTemplate, onUpdateTemplate, templates, onApplyTemplate, onDeleteTemplate,
 }: SectionHeaderProps) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const { sectionConfig, toggleSection } = usePrescription();
@@ -38,6 +40,8 @@ export default function SectionHeader({
 
   const [anchorEl, setAnchorEl] = useState<HTMLButtonElement | null>(null);
   const [newTemplateName, setNewTemplateName] = useState('');
+  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
+  const [editTemplateName, setEditTemplateName] = useState('');
   const popoverOpen = Boolean(anchorEl);
 
   const handleSaveTemplate = () => {
@@ -48,19 +52,38 @@ export default function SectionHeader({
     setAnchorEl(null);
   };
 
+  const handleStartEdit = (templateId: string, currentName: string) => {
+    setEditingTemplateId(templateId);
+    setEditTemplateName(currentName);
+  };
+
+  const handleUpdateTemplate = () => {
+    const trimmed = editTemplateName.trim();
+    if (!trimmed || !editingTemplateId || !onUpdateTemplate) return;
+    onUpdateTemplate(editingTemplateId, trimmed);
+    setEditingTemplateId(null);
+    setEditTemplateName('');
+  };
+
+  const handleCancelEdit = () => {
+    setEditingTemplateId(null);
+    setEditTemplateName('');
+  };
+
   if (!isEnabled) return null;
 
   const hasTemplateSupport = Boolean(templateType && onSaveTemplate && onApplyTemplate);
 
   return (
     <Box
+      id={`section-${id}`}
       sx={{
         mb: 2,
         borderRadius: 2,
         border: '1px solid',
         borderColor: 'divider',
-        overflow: 'hidden',
         bgcolor: 'background.paper',
+        scrollMarginTop: 8,
       }}
     >
       <Box
@@ -117,10 +140,10 @@ export default function SectionHeader({
         <Popover
           open={popoverOpen}
           anchorEl={anchorEl}
-          onClose={() => { setAnchorEl(null); setNewTemplateName(''); }}
+          onClose={() => { setAnchorEl(null); setNewTemplateName(''); handleCancelEdit(); }}
           anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
           transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-          slotProps={{ paper: { sx: { width: 300, maxHeight: 400 } } }}
+          slotProps={{ paper: { sx: { width: 320, maxHeight: 440 } } }}
         >
           <Box sx={{ px: 2, py: 1.5 }}>
             <Typography variant="subtitle2" color="text.secondary">
@@ -130,39 +153,77 @@ export default function SectionHeader({
           <Divider />
 
           {templates && templates.length > 0 ? (
-            <List dense sx={{ maxHeight: 220, overflow: 'auto', py: 0.5 }}>
+            <List dense sx={{ maxHeight: 240, overflow: 'auto', py: 0.5 }}>
               {templates.map((t) => (
-                <ListItem key={t.templateId} sx={{ pr: 10 }}>
-                  <ListItemText
-                    primary={t.name}
-                    primaryTypographyProps={{ variant: 'body2', noWrap: true }}
-                  />
-                  <ListItemSecondaryAction>
-                    <Tooltip title="Apply">
-                      <IconButton
-                        edge="end"
+                <ListItem key={t.templateId} sx={{ pr: 12 }}>
+                  {editingTemplateId === t.templateId ? (
+                    <Stack direction="row" spacing={0.5} sx={{ flex: 1, alignItems: 'center' }}>
+                      <TextField
                         size="small"
-                        color="primary"
-                        onClick={() => {
-                          onApplyTemplate?.(t.templateId);
-                          setAnchorEl(null);
+                        value={editTemplateName}
+                        onChange={(e) => setEditTemplateName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleUpdateTemplate();
+                          if (e.key === 'Escape') handleCancelEdit();
                         }}
-                      >
-                        <PlayArrowIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Delete">
-                      <IconButton
-                        edge="end"
-                        size="small"
-                        color="error"
-                        onClick={() => onDeleteTemplate?.(t.templateId)}
-                        sx={{ ml: 0.5 }}
-                      >
-                        <DeleteOutlineIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                  </ListItemSecondaryAction>
+                        sx={{ flex: 1 }}
+                        slotProps={{ htmlInput: { maxLength: 50 } }}
+                        autoFocus
+                      />
+                      <Button size="small" variant="contained" onClick={handleUpdateTemplate} sx={{ minWidth: 50, textTransform: 'none', fontSize: 11 }}>
+                        Save
+                      </Button>
+                      <Button size="small" onClick={handleCancelEdit} sx={{ minWidth: 40, textTransform: 'none', fontSize: 11 }}>
+                        Cancel
+                      </Button>
+                    </Stack>
+                  ) : (
+                    <>
+                      <ListItemText
+                        primary={t.name}
+                        primaryTypographyProps={{ variant: 'body2', noWrap: true }}
+                      />
+                      <ListItemSecondaryAction>
+                        <Tooltip title="Apply">
+                          <IconButton
+                            edge="end"
+                            size="small"
+                            color="primary"
+                            onClick={() => {
+                              onApplyTemplate?.(t.templateId);
+                              setAnchorEl(null);
+                            }}
+                          >
+                            <PlayArrowIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                        {onUpdateTemplate && (
+                          <Tooltip title="Update with current items">
+                            <IconButton
+                              edge="end"
+                              size="small"
+                              color="info"
+                              onClick={() => handleStartEdit(t.templateId, t.name)}
+                              sx={{ ml: 0.5 }}
+                            >
+                              <EditIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        )}
+                        <Tooltip title="Delete">
+                          <IconButton
+                            edge="end"
+                            size="small"
+                            color="error"
+                            onClick={() => onDeleteTemplate?.(t.templateId)}
+                            sx={{ ml: 0.5 }}
+                          >
+                            <DeleteOutlineIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      </ListItemSecondaryAction>
+                    </>
+                  )}
                 </ListItem>
               ))}
             </List>

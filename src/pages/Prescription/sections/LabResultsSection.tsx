@@ -7,11 +7,13 @@ import AssessmentIcon from '@mui/icons-material/Assessment';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
+import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
 import { useQuery } from '@tanstack/react-query';
 import SectionHeader from '../components/SectionHeader';
 import { usePrescription } from '../context/PrescriptionContext';
 import { mastersApi } from '@/services/api';
+import BrowsePanel from '../components/BrowsePanel';
 import type { LabResult } from '@/types';
 
 const FALLBACK_INTERPRETATIONS = ['Normal', 'Abnormal', 'Critical'];
@@ -24,6 +26,7 @@ export default function LabResultsSection() {
   const [newResult, setNewResult] = useState<LabResult>({
     testName: '', reading: '', unit: '', normalRange: '', interpretation: 'Normal', date: '', notes: '',
   });
+  const [browseOpen, setBrowseOpen] = useState(false);
 
   const { data: masterTests } = useQuery({
     queryKey: ['masters', 'lab-tests', searchTerm],
@@ -45,6 +48,10 @@ export default function LabResultsSection() {
     setNewResult({ testName: '', reading: '', unit: '', normalRange: '', interpretation: 'Normal', date: '', notes: '' });
     setSearchTerm('');
   };
+
+  const handleBrowseSave = useCallback((results: LabResult[]) => {
+    results.forEach(r => addLabResult(r));
+  }, [addLabResult]);
 
   const handleDragEnd = useCallback((result: DropResult) => {
     if (!result.destination) return;
@@ -88,15 +95,27 @@ export default function LabResultsSection() {
           <Grid size={{ xs: 6, sm: 2 }}>
             <TextField label="Normal Range" value={newResult.normalRange} onChange={e => setNewResult(p => ({ ...p, normalRange: e.target.value }))} size="small" fullWidth />
           </Grid>
-          <Grid size={{ xs: 6, sm: 2 }}>
+          <Grid size={{ xs: 6, sm: 1.5 }}>
             <TextField select label="Interpretation" value={newResult.interpretation} onChange={e => setNewResult(p => ({ ...p, interpretation: e.target.value }))} size="small" fullWidth>
               {interpretationOpts && interpretationOpts.length > 0
                 ? interpretationOpts.map(o => <MenuItem key={o.dropdown_option_id} value={o.option_value}>{o.option_value}</MenuItem>)
                 : FALLBACK_INTERPRETATIONS.map(v => <MenuItem key={v} value={v}>{v}</MenuItem>)}
             </TextField>
           </Grid>
-          <Grid size={{ xs: 12, sm: 1.5 }}>
+          <Grid size={{ xs: 6, sm: 1 }}>
             <Button variant="contained" fullWidth onClick={handleAdd} startIcon={<AddIcon />} sx={{ height: 40 }}>Add</Button>
+          </Grid>
+          <Grid size={{ xs: 6, sm: 1 }}>
+            <Button
+              variant="outlined"
+              fullWidth
+              onClick={() => setBrowseOpen(true)}
+              startIcon={<FolderOpenIcon />}
+              sx={{ height: 40, textTransform: 'none' }}
+              color="secondary"
+            >
+              Browse
+            </Button>
           </Grid>
         </Grid>
       </Box>
@@ -167,6 +186,13 @@ export default function LabResultsSection() {
           </DragDropContext>
         </Table>
       )}
+
+      <BrowsePanel
+        open={browseOpen}
+        onClose={() => setBrowseOpen(false)}
+        onSave={handleBrowseSave}
+        dropdownOptions={dropdownOptions as Record<string, Record<string, { dropdown_option_id: number; option_value: string; applies_to?: string[] }[]>> | null}
+      />
     </SectionHeader>
   );
 }

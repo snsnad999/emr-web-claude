@@ -56,6 +56,15 @@ function PrescriptionContent() {
     dropdownOptions, printEnabledSections,
   } = usePrescription();
 
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  const handleScrollToSection = useCallback((sectionId: string) => {
+    const el = document.getElementById(`section-${sectionId}`);
+    if (el && scrollContainerRef.current) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, []);
+
   // Check if editing or copying from location state
   const locationState = location.state as {
     prescriptionData?: Record<string, unknown>;
@@ -148,6 +157,7 @@ function PrescriptionContent() {
           prescriptionData,
           dropdownOptions,
           printSettings: printEnabledSections,
+          language: prescriptionData.language || 'en',
         },
       });
     } catch {
@@ -213,9 +223,10 @@ function PrescriptionContent() {
         mainTemplates={mainTemplates}
         onConfigurePad={() => setConfigurePadOpen(true)}
         onApplyMainTemplate={handleApplyMainTemplate}
+        onScrollToSection={handleScrollToSection}
       />
 
-      <Box sx={{ flex: 1, overflow: 'auto', p: 2 }}>
+      <Box ref={scrollContainerRef} sx={{ flex: 1, overflow: 'auto', p: 2 }}>
         {orderedSections.map(sectionId => {
           const Component = SECTION_COMPONENTS[sectionId];
           if (!Component) return null;

@@ -29,11 +29,12 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { prescriptionApi } from '@/services/api';
-import type { Prescription } from '@/types';
+import type { Prescription, Patient } from '@/types';
 import PatientPrescriptionPDF from './PatientPrescriptionPDF';
 
 interface PrescriptionHistoryTabProps {
   patientId: string;
+  patient?: Patient;
 }
 
 function SkeletonRows() {
@@ -67,10 +68,12 @@ function mapPrescriptionToContextState(rx: Prescription) {
     surgicalNotes: rx.notes?.surgicalNotes || '',
     privateNotes: rx.notes?.privateNotes || '',
     customSections: rx.customSections || [],
+    medicalConditions: rx.medicalConditions || [],
+    noRelevantHistory: rx.noRelevantHistory || false,
   };
 }
 
-export default function PrescriptionHistoryTab({ patientId }: PrescriptionHistoryTabProps) {
+export default function PrescriptionHistoryTab({ patientId, patient }: PrescriptionHistoryTabProps) {
   const navigate = useNavigate();
   const [pdfPrescription, setPdfPrescription] = useState<Prescription | null>(null);
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
@@ -272,6 +275,7 @@ export default function PrescriptionHistoryTab({ patientId }: PrescriptionHistor
       {pdfPrescription && (
         <PatientPrescriptionPDF
           prescription={pdfPrescription}
+          patient={patient}
           open={Boolean(pdfPrescription)}
           onClose={() => setPdfPrescription(null)}
         />

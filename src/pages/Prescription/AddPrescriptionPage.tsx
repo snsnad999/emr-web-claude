@@ -23,7 +23,7 @@ import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import PrescriptionPdf, { downloadPdfFromUrl } from './components/PrescriptionPdf';
 import type { PrescriptionPdfData } from './components/PrescriptionPdf';
-import type { PatientInfo, DropdownOptions } from '@/types';
+import type { PatientInfo, DropdownOptions, PrescriptionLanguage } from '@/types';
 
 const MotionBox = motion.create(Box);
 
@@ -34,13 +34,14 @@ interface LocationState {
   prescriptionData?: PrescriptionPdfData;
   dropdownOptions?: DropdownOptions;
   printSettings?: Record<string, boolean>;
+  language?: PrescriptionLanguage;
 }
 
 export default function AddPrescriptionPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const state = (location.state || {}) as LocationState;
-  const { patientId, prescriptionId, patientInfo, prescriptionData, dropdownOptions, printSettings } = state;
+  const { patientId, prescriptionId, patientInfo, prescriptionData, dropdownOptions, printSettings, language = 'en' } = state;
 
   const [pdfDataUrl, setPdfDataUrl] = useState<string | null>(null);
   const [pdfFullscreen, setPdfFullscreen] = useState(false);
@@ -277,6 +278,7 @@ export default function AddPrescriptionPage() {
                     patientInfo={patientInfo}
                     dropdownOptions={dropdownOptions}
                     printSettings={printSettings}
+                    language={language}
                     onPdfReady={handlePdfReady}
                   />
                 ) : (

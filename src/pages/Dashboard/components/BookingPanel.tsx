@@ -390,19 +390,23 @@ export default function BookingPanel({
       anchor="right"
       open={open}
       onClose={onClose}
-      sx={{ '& .MuiDrawer-paper': { width: { xs: '100%', sm: 440 }, p: 3 } }}
+      sx={{ '& .MuiDrawer-paper': { width: { xs: '100%', sm: 440 }, display: 'flex', flexDirection: 'column' } }}
     >
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-        <Typography variant="h6" fontWeight={700}>
-          {isCheckinMode ? 'Walk-in Check-in' : 'Book Appointment'}
-        </Typography>
-        <IconButton onClick={onClose} size="small">
-          <CloseIcon />
-        </IconButton>
+      {/* Fixed header */}
+      <Box sx={{ flexShrink: 0, px: 3, pt: 3, pb: 0 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+          <Typography variant="h6" fontWeight={700}>
+            {isCheckinMode ? 'Walk-in Check-in' : 'Book Appointment'}
+          </Typography>
+          <IconButton onClick={onClose} size="small">
+            <CloseIcon />
+          </IconButton>
+        </Box>
+        <Divider />
       </Box>
 
-      <Divider sx={{ mb: 3 }} />
-
+      {/* Scrollable content */}
+      <Box sx={{ flex: 1, overflow: 'auto', px: 3, py: 2.5 }}>
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
         {/* Booking mode toggle (only show when booking for today) */}
         {isBookingToday && (
@@ -522,7 +526,6 @@ export default function BookingPanel({
                 onChange={(_, val) => {
                   if (val !== null) {
                     setSlotDuration(val as number);
-                    setSelectedSlot('');
                   }
                 }}
                 size="small"
@@ -707,14 +710,19 @@ export default function BookingPanel({
           </Paper>
         )}
 
+      </Box>
+      </Box>
+
+      {/* Fixed bottom button */}
+      <Box sx={{ flexShrink: 0, px: 3, py: 2, borderTop: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}>
         <Button
           variant="contained"
           size="large"
+          fullWidth
           color={isCheckinMode ? 'success' : 'primary'}
           onClick={handleSubmit}
           disabled={!canSubmit}
           startIcon={isCheckinMode ? <WalkInIcon /> : <ScheduleIcon />}
-          sx={{ mt: 1 }}
         >
           {getSubmitLabel()}
         </Button>

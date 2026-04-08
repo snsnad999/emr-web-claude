@@ -108,6 +108,9 @@ export const patientApi = {
 
   searchPatients: (query: string) =>
     api.get<ApiResponse<Patient[]>>('/patients/search', { params: { q: query } }).then((r) => r.data),
+
+  savePatientHistory: (patientId: string, data: Record<string, unknown>) =>
+    api.put<ApiResponse<unknown>>('/patientDetail-history', { patientId, ...data }).then((r) => r.data),
 };
 
 // ─── Queue API ───────────────────────────────────────────────────────
@@ -226,7 +229,7 @@ export const prescriptionApi = {
       phoneDisplay: string;
       rawData: { address: string };
       lockedVitals: PrescriptionVitals | null;
-      medicalHistory: Array<{ condition_name: string; value: number; since?: string }> | null;
+      medicalHistory: { conditions?: Array<{ name: string; value: string; since?: string }>; noHistory?: boolean } | null;
     }>>('/patientDetail-history', { params: { id: patientId } }).then((r) => r.data),
 };
 
@@ -299,6 +302,9 @@ export const mastersApi = {
 
   getSalutations: () =>
     api.get('/masters/salutations').then(r => unwrapMaster<{ salutationId: string; label: string }>(r)),
+
+  bulkImport: (type: string, items: Record<string, unknown>[]) =>
+    api.post<ApiResponse<{ inserted: number; failed: number; errors: Array<{ index: number; error: string }> }>>('/masters/bulk-import', { type, items }).then(r => r.data),
 };
 
 // ─── Templates API ───────────────────────────────────────────────────

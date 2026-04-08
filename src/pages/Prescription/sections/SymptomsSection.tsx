@@ -2,16 +2,20 @@ import { useState, useCallback } from 'react';
 import {
   Box, TextField, Button, Autocomplete, Chip, IconButton,
   Table, TableHead, TableRow, TableCell, TableBody, MenuItem,
+  Paper, List, ListItemButton, ListItemText, CircularProgress, Divider, Typography,
 } from '@mui/material';
 import SickIcon from '@mui/icons-material/Sick';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
+import WhatshotIcon from '@mui/icons-material/Whatshot';
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
 import { useQuery } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import SectionHeader from '../components/SectionHeader';
 import { usePrescription } from '../context/PrescriptionContext';
 import { mastersApi } from '@/services/api';
+import { useFrequentlyUsed } from '@/hooks/useFrequentlyUsed';
 import type { Symptom } from '@/types';
 
 const FALLBACK_SEVERITY = ['mild', 'moderate', 'severe'];
@@ -20,11 +24,14 @@ const FALLBACK_LATERALITY = ['left', 'right', 'bilateral'];
 export default function SymptomsSection() {
   const {
     symptoms, addSymptom, removeSymptom, updateSymptom, reorderSymptoms,
-    dropdownOptions, getTemplatesByType, addTemplate, deleteTemplate, applyTemplate,
+    dropdownOptions, getTemplatesByType, addTemplate, updateTemplate, deleteTemplate, applyTemplate,
   } = usePrescription();
   const severityOptions = dropdownOptions?.symptoms?.severity;
   const lateralityOptions = dropdownOptions?.symptoms?.laterality;
   const [searchTerm, setSearchTerm] = useState('');
+  const [showFrequent, setShowFrequent] = useState(false);
+
+  const { items: frequentSymptoms, isLoading: loadingFrequent, fetchIfNeeded } = useFrequentlyUsed('symptoms');
 
   const { data: masterSymptoms } = useQuery({
     queryKey: ['masters', 'symptoms', searchTerm],
@@ -35,11 +42,36 @@ export default function SymptomsSection() {
 
   const symptomOptions = masterSymptoms?.data?.map(s => s.name) || [];
 
+  const isAlreadyAdded = (name: string): boolean =>
+    symptoms.some(s => s.name.toLowerCase() === name.toLowerCase());
+
   const handleAdd = (name: string) => {
     if (!name.trim()) return;
+    if (isAlreadyAdded(name.trim())) {
+      toast.error(`"${name.trim()}" is already added`);
+      return;
+    }
     const newSymptom: Symptom = { name: name.trim(), severity: 'moderate' };
     addSymptom(newSymptom);
     setSearchTerm('');
+    setShowFrequent(false);
+  };
+
+  const handleAddFromFrequent = (item: Record<string, unknown>) => {
+    const name = (item.name as string) || '';
+    if (isAlreadyAdded(name)) {
+      toast.error(`"${name}" is already added`);
+      return;
+    }
+    addSymptom({ name, severity: 'moderate' });
+    setShowFrequent(false);
+  };
+
+  const handleInputFocus = () => {
+    if (!searchTerm) {
+      fetchIfNeeded();
+      setShowFrequent(true);
+    }
   };
 
   const handleDragEnd = useCallback((result: DropResult) => {
@@ -63,6 +95,8 @@ export default function SymptomsSection() {
     );
   };
 
+  const showFrequentDropdown = showFrequent && !searchTerm && frequentSymptoms.length > 0;
+
   return (
     <SectionHeader
       id="symptoms"
@@ -72,22 +106,66 @@ export default function SymptomsSection() {
       templateType="symptom"
       templates={symptomTemplates}
       onSaveTemplate={handleSaveTemplate}
+      onUpdateTemplate={(id, name) => updateTemplate(id, name, 'symptom', symptoms.map(s => ({
+        name: s.name, severity: s.severity, duration: s.duration, laterality: s.laterality,
+      })))}
       onApplyTemplate={(id) => applyTemplate(id, 'symptom')}
       onDeleteTemplate={(id) => deleteTemplate(id, 'symptom')}
     >
       <Box sx={{ mb: 2, display: 'flex', gap: 1 }}>
-        <Autocomplete
-          freeSolo
-          options={symptomOptions}
-          inputValue={searchTerm}
-          onInputChange={(_, val) => setSearchTerm(val)}
-          onChange={(_, val) => { if (val) handleAdd(val); }}
-          renderInput={(params) => (
-            <TextField {...params} placeholder="Search symptoms..." size="small" />
+        <Box sx={{ flex: 1, position: 'relative' }}>
+          <Autocomplete
+            freeSolo
+            options={symptomOptions}
+            inputValue={searchTerm}
+            onInputChange={(_, val) => {
+              setSearchTerm(val);
+              if (val) setShowFrequent(false);
+              else setShowFrequent(true);
+            }}
+            onChange={(_, val) => {
+              if (val) handleAdd(val);
+              setShowFrequent(false);
+            }}
+            onFocus={handleInputFocus}
+            onBlur={() => setTimeout(() => setShowFrequent(false), 200)}
+            renderInput={(params) => (
+              <TextField {...params} placeholder="Search symptoms..." size="small" />
+            )}
+            size="small"
+          />
+          {showFrequentDropdown && (
+            <Paper
+              elevation={8}
+              sx={{
+                position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 20,
+                maxHeight: 260, overflow: 'auto', mt: 0.5, border: '1px solid', borderColor: 'divider',
+              }}
+            >
+              <Box sx={{ px: 1.5, py: 1, display: 'flex', alignItems: 'center', gap: 0.5, bgcolor: 'grey.50' }}>
+                <WhatshotIcon sx={{ fontSize: 16, color: 'warning.main' }} />
+                <Typography variant="caption" fontWeight={600} color="text.secondary">Top Used Symptoms</Typography>
+                {loadingFrequent && <CircularProgress size={12} sx={{ ml: 'auto' }} />}
+              </Box>
+              <Divider />
+              <List dense disablePadding>
+                {frequentSymptoms.map((item, idx) => {
+                  const name = (item.name as string) || '';
+                  const already = isAlreadyAdded(name);
+                  return (
+                    <ListItemButton key={idx} disabled={already} onClick={() => handleAddFromFrequent(item)} sx={{ py: 0.5 }}>
+                      <ListItemText
+                        primary={name}
+                        primaryTypographyProps={{ variant: 'body2', fontWeight: 500, color: already ? 'text.disabled' : 'text.primary' }}
+                      />
+                      {already && <Chip label="Added" size="small" sx={{ height: 20, fontSize: 10 }} />}
+                    </ListItemButton>
+                  );
+                })}
+              </List>
+            </Paper>
           )}
-          sx={{ flex: 1 }}
-          size="small"
-        />
+        </Box>
         <Button
           variant="contained"
           size="small"

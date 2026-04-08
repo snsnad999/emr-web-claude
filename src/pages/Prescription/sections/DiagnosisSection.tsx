@@ -2,16 +2,20 @@ import { useState, useCallback } from 'react';
 import {
   Box, TextField, Button, Autocomplete, IconButton, Chip,
   Table, TableHead, TableRow, TableCell, TableBody, MenuItem,
+  Paper, List, ListItemButton, ListItemText, CircularProgress, Divider, Typography,
 } from '@mui/material';
 import MedicalInformationIcon from '@mui/icons-material/MedicalInformation';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
+import WhatshotIcon from '@mui/icons-material/Whatshot';
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
 import { useQuery } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import SectionHeader from '../components/SectionHeader';
 import { usePrescription } from '../context/PrescriptionContext';
 import { mastersApi } from '@/services/api';
+import { useFrequentlyUsed } from '@/hooks/useFrequentlyUsed';
 import type { Diagnosis, DiagnosisType, DiagnosisStatus } from '@/types';
 
 const TYPE_OPTIONS: DiagnosisType[] = ['Primary', 'Secondary', 'Differential'];
@@ -20,11 +24,14 @@ const FALLBACK_STATUS: DiagnosisStatus[] = ['Active', 'Resolved', 'Chronic'];
 export default function DiagnosisSection() {
   const {
     diagnoses, addDiagnosis, removeDiagnosis, updateDiagnosis, reorderDiagnoses,
-    getTemplatesByType, addTemplate, deleteTemplate, applyTemplate,
+    getTemplatesByType, addTemplate, updateTemplate, deleteTemplate, applyTemplate,
     dropdownOptions,
   } = usePrescription();
   const statusOptions = dropdownOptions?.diagnosis?.status;
   const [searchTerm, setSearchTerm] = useState('');
+  const [showFrequent, setShowFrequent] = useState(false);
+
+  const { items: frequentDiagnoses, isLoading: loadingFrequent, fetchIfNeeded } = useFrequentlyUsed('diagnoses');
 
   const { data: masterDiagnoses } = useQuery({
     queryKey: ['masters', 'diagnoses', searchTerm],
@@ -34,21 +41,51 @@ export default function DiagnosisSection() {
   });
 
   const diagnosisOptions = masterDiagnoses?.data?.map(d => ({
-    label: `${d.icdCode} — ${d.description}`,
+    label: d.description,
     code: d.icdCode,
     description: d.description,
   })) || [];
 
+  const isAlreadyAdded = (desc: string): boolean =>
+    diagnoses.some(d => d.description.toLowerCase() === desc.toLowerCase());
+
   const handleAdd = (option: { code: string; description: string } | null, freeText?: string) => {
+    const desc = option?.description || freeText || searchTerm;
+    if (!desc.trim()) return;
+    if (isAlreadyAdded(desc.trim())) {
+      toast.error(`"${desc.trim()}" is already added`);
+      return;
+    }
     const newDiag: Diagnosis = {
       icdCode: option?.code || '',
-      description: option?.description || freeText || searchTerm,
+      description: desc.trim(),
       type: 'Primary',
       status: 'Active',
     };
-    if (newDiag.description.trim()) {
-      addDiagnosis(newDiag);
-      setSearchTerm('');
+    addDiagnosis(newDiag);
+    setSearchTerm('');
+    setShowFrequent(false);
+  };
+
+  const handleAddFromFrequent = (item: Record<string, unknown>) => {
+    const desc = (item.description as string) || (item.name as string) || '';
+    if (isAlreadyAdded(desc)) {
+      toast.error(`"${desc}" is already added`);
+      return;
+    }
+    addDiagnosis({
+      icdCode: (item.icdCode as string) || '',
+      description: desc,
+      type: 'Primary',
+      status: (item.status as DiagnosisStatus) || 'Active',
+    });
+    setShowFrequent(false);
+  };
+
+  const handleInputFocus = () => {
+    if (!searchTerm) {
+      fetchIfNeeded();
+      setShowFrequent(true);
     }
   };
 
@@ -73,6 +110,8 @@ export default function DiagnosisSection() {
     );
   };
 
+  const showFrequentDropdown = showFrequent && !searchTerm && frequentDiagnoses.length > 0;
+
   return (
     <SectionHeader
       id="diagnosis"
@@ -82,41 +121,82 @@ export default function DiagnosisSection() {
       templateType="diagnosis"
       templates={diagnosisTemplates}
       onSaveTemplate={handleSaveTemplate}
+      onUpdateTemplate={(id, name) => updateTemplate(id, name, 'diagnosis', diagnoses.map(d => ({
+        icdCode: d.icdCode, description: d.description, type: d.type, status: d.status,
+      })))}
       onApplyTemplate={(id) => applyTemplate(id, 'diagnosis')}
       onDeleteTemplate={(id) => deleteTemplate(id, 'diagnosis')}
     >
       <Box sx={{ mb: 2, display: 'flex', gap: 1 }}>
-        <Autocomplete
-          freeSolo
-          options={diagnosisOptions}
-          getOptionLabel={opt => typeof opt === 'string' ? opt : opt.label}
-          inputValue={searchTerm}
-          onInputChange={(_, val) => setSearchTerm(val)}
-          onChange={(_, val) => {
-            if (typeof val === 'string') handleAdd(null, val);
-            else if (val) handleAdd(val);
-          }}
-          renderInput={params => (
-            <TextField {...params} placeholder="Search ICD-10 diagnoses..." size="small" />
+        <Box sx={{ flex: 1, position: 'relative' }}>
+          <Autocomplete
+            freeSolo
+            options={diagnosisOptions}
+            getOptionLabel={opt => typeof opt === 'string' ? opt : opt.label}
+            inputValue={searchTerm}
+            onInputChange={(_, val) => {
+              setSearchTerm(val);
+              if (val) setShowFrequent(false);
+              else setShowFrequent(true);
+            }}
+            onChange={(_, val) => {
+              if (typeof val === 'string') handleAdd(null, val);
+              else if (val) handleAdd(val);
+              setShowFrequent(false);
+            }}
+            onFocus={handleInputFocus}
+            onBlur={() => setTimeout(() => setShowFrequent(false), 200)}
+            renderInput={params => (
+              <TextField {...params} placeholder="Search diagnoses..." size="small" />
+            )}
+            size="small"
+          />
+          {showFrequentDropdown && (
+            <Paper
+              elevation={8}
+              sx={{
+                position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 20,
+                maxHeight: 260, overflow: 'auto', mt: 0.5, border: '1px solid', borderColor: 'divider',
+              }}
+            >
+              <Box sx={{ px: 1.5, py: 1, display: 'flex', alignItems: 'center', gap: 0.5, bgcolor: 'grey.50' }}>
+                <WhatshotIcon sx={{ fontSize: 16, color: 'warning.main' }} />
+                <Typography variant="caption" fontWeight={600} color="text.secondary">Top Used Diagnoses</Typography>
+                {loadingFrequent && <CircularProgress size={12} sx={{ ml: 'auto' }} />}
+              </Box>
+              <Divider />
+              <List dense disablePadding>
+                {frequentDiagnoses.map((item, idx) => {
+                  const desc = (item.description as string) || (item.name as string) || '';
+                  const already = isAlreadyAdded(desc);
+                  return (
+                    <ListItemButton key={idx} disabled={already} onClick={() => handleAddFromFrequent(item)} sx={{ py: 0.5 }}>
+                      <ListItemText
+                        primary={desc}
+                        primaryTypographyProps={{ variant: 'body2', fontWeight: 500, color: already ? 'text.disabled' : 'text.primary' }}
+                      />
+                      {already && <Chip label="Added" size="small" sx={{ height: 20, fontSize: 10 }} />}
+                    </ListItemButton>
+                  );
+                })}
+              </List>
+            </Paper>
           )}
-          sx={{ flex: 1 }}
-          size="small"
-        />
+        </Box>
         <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={() => handleAdd(null)}>
           Add
         </Button>
       </Box>
 
       {diagnoses.length > 0 && (
-        <Table size="small">
+        <Table size="small" sx={{ tableLayout: 'fixed' }}>
           <TableHead>
             <TableRow>
               <TableCell sx={{ width: 40, p: 0.5 }} />
-              <TableCell>ICD Code</TableCell>
               <TableCell>Description</TableCell>
-              <TableCell sx={{ width: 130 }}>Type</TableCell>
-              <TableCell sx={{ width: 120 }}>Status</TableCell>
-              <TableCell sx={{ width: 140 }}>Notes</TableCell>
+              <TableCell sx={{ width: 160, minWidth: 160 }}>Type</TableCell>
+              <TableCell sx={{ width: 160, minWidth: 160 }}>Status</TableCell>
+              <TableCell sx={{ width: 180, minWidth: 180 }}>Notes</TableCell>
               <TableCell sx={{ width: 50 }} />
             </TableRow>
           </TableHead>
@@ -146,11 +226,8 @@ export default function DiagnosisSection() {
                               <DragIndicatorIcon fontSize="small" />
                             </Box>
                           </TableCell>
-                          <TableCell>
-                            {d.icdCode && <Chip label={d.icdCode} size="small" color="info" variant="outlined" />}
-                          </TableCell>
                           <TableCell>{d.description}</TableCell>
-                          <TableCell>
+                          <TableCell sx={{ minWidth: 160 }}>
                             <TextField
                               select value={d.type} size="small" fullWidth
                               onChange={e => updateDiagnosis(i, { ...d, type: e.target.value as DiagnosisType })}
@@ -158,7 +235,7 @@ export default function DiagnosisSection() {
                               {TYPE_OPTIONS.map(t => <MenuItem key={t} value={t}>{t}</MenuItem>)}
                             </TextField>
                           </TableCell>
-                          <TableCell>
+                          <TableCell sx={{ minWidth: 160 }}>
                             <TextField
                               select value={d.status} size="small" fullWidth
                               onChange={e => updateDiagnosis(i, { ...d, status: e.target.value as DiagnosisStatus })}
@@ -168,7 +245,7 @@ export default function DiagnosisSection() {
                                 : FALLBACK_STATUS.map(s => <MenuItem key={s} value={s}>{s}</MenuItem>)}
                             </TextField>
                           </TableCell>
-                          <TableCell>
+                          <TableCell sx={{ minWidth: 180 }}>
                             <TextField
                               value={d.notes || ''} size="small" fullWidth placeholder="Notes"
                               onChange={e => updateDiagnosis(i, { ...d, notes: e.target.value })}

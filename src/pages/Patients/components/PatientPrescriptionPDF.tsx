@@ -13,15 +13,16 @@ import PrintIcon from '@mui/icons-material/Print';
 import { toast } from 'sonner';
 import PrescriptionPdf, { downloadPdfFromUrl } from '@/pages/Prescription/components/PrescriptionPdf';
 import type { PrescriptionPdfData } from '@/pages/Prescription/components/PrescriptionPdf';
-import type { Prescription } from '@/types';
+import type { Prescription, Patient, PatientInfo } from '@/types';
 
 interface PatientPrescriptionPDFProps {
   prescription: Prescription;
+  patient?: Patient;
   open: boolean;
   onClose: () => void;
 }
 
-export default function PatientPrescriptionPDF({ prescription, open, onClose }: PatientPrescriptionPDFProps) {
+export default function PatientPrescriptionPDF({ prescription, patient, open, onClose }: PatientPrescriptionPDFProps) {
   const [pdfDataUrl, setPdfDataUrl] = useState<string | null>(null);
 
   const pdfData: PrescriptionPdfData = useMemo(() => ({
@@ -38,26 +39,37 @@ export default function PatientPrescriptionPDF({ prescription, open, onClose }: 
     advice: prescription.advice || '',
     notes: { surgicalNotes: prescription.notes?.surgicalNotes || '', privateNotes: prescription.notes?.privateNotes || '' },
     customSections: prescription.customSections || [],
-    medicalConditions: [],
-    noRelevantHistory: false,
+    medicalConditions: (prescription.medicalConditions || []).map(c => ({
+      name: c.name,
+      value: c.value,
+      since: c.since || '',
+    })),
+    noRelevantHistory: prescription.noRelevantHistory || false,
   }), [prescription]);
 
-  const patientInfo = useMemo(() => {
-    if (!prescription.patientId) return null;
-    // Try to extract patient info from the prescription if available
-    const raw = prescription as unknown as Record<string, unknown>;
-    const patientData = raw.patient as Record<string, unknown> | undefined;
-    if (patientData) {
+  const patientInfo: PatientInfo | null = useMemo(() => {
+    if (patient) {
+      const genderMap: Record<string, string> = { M: 'Male', F: 'Female', Other: 'Other' };
+      let ageDisplay = '';
+      if (patient.dateOfBirth) {
+        const diffMs = Date.now() - new Date(patient.dateOfBirth).getTime();
+        const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+        if (days < 30) ageDisplay = `${days}d`;
+        else if (days < 730) ageDisplay = `${Math.floor(days / 30)}m`;
+        else ageDisplay = `${Math.floor(days / 365)}y`;
+      } else if (patient.age) {
+        ageDisplay = `${patient.age}y`;
+      }
       return {
-        name: (patientData.name || patientData.fullName || '') as string,
-        age: (patientData.age || patientData.ageDisplay || '') as string,
-        gender: (patientData.gender || patientData.genderDisplay || '') as string,
-        phone: (patientData.phone || patientData.phoneDisplay || '') as string,
-        address: (patientData.address || '') as string,
+        name: `${patient.salutation ? patient.salutation + '. ' : ''}${patient.name}`,
+        age: ageDisplay,
+        gender: genderMap[patient.gender] || patient.gender,
+        phone: patient.phone || '',
+        address: [patient.address?.street, patient.address?.city, patient.address?.state].filter(Boolean).join(', '),
       };
     }
     return null;
-  }, [prescription]);
+  }, [patient]);
 
   const handlePdfReady = useCallback((dataUrl: string) => {
     setPdfDataUrl(dataUrl);

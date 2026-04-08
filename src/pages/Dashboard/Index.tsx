@@ -3,7 +3,9 @@ import {
   Add as AddIcon,
   Refresh as RefreshIcon,
   ViewList as ListIcon,
-  CalendarMonth as CalendarIcon,
+  CalendarViewDay as DayIcon,
+  CalendarViewWeek as WeekIcon,
+  CalendarMonth as MonthIcon,
 } from '@mui/icons-material';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSelector, useDispatch } from 'react-redux';
@@ -22,10 +24,12 @@ import QueueTable from './components/QueueTable';
 import BookingPanel from './components/BookingPanel';
 import EmptyState from './components/EmptyState';
 import DayCalendarView from './components/DayCalendarView';
+import WeekCalendarView from './components/WeekCalendarView';
+import MonthCalendarView from './components/MonthCalendarView';
 
 import { useState, useCallback } from 'react';
 
-type ViewMode = 'queue' | 'day';
+type ViewMode = 'queue' | 'day' | 'week' | 'month';
 
 export default function QueueDashboard() {
   const dispatch = useDispatch();
@@ -91,19 +95,27 @@ export default function QueueDashboard() {
 
   return (
     <Box>
-      {/* Header row */}
+      {/* Header row — sticky so buttons remain visible while scrolling */}
       <Box
         component={motion.div}
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3 }}
         sx={{
+          position: 'sticky',
+          top: -24,
+          zIndex: 10,
+          bgcolor: 'background.default',
+          mx: -3,
+          px: 3,
+          pt: 3,
+          pb: 2,
+          mt: -3,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           flexWrap: 'wrap',
           gap: 2,
-          mb: 3,
         }}
       >
         <Box>
@@ -133,6 +145,9 @@ export default function QueueDashboard() {
                 border: 'none',
                 px: 1.5,
                 py: 0.5,
+                gap: 0.5,
+                fontSize: '0.75rem',
+                textTransform: 'none',
                 '&.Mui-selected': {
                   bgcolor: 'primary.main',
                   color: 'primary.contrastText',
@@ -142,10 +157,16 @@ export default function QueueDashboard() {
             }}
           >
             <ToggleButton value="queue" aria-label="Queue list view">
-              <ListIcon fontSize="small" />
+              <ListIcon sx={{ fontSize: 18 }} />
             </ToggleButton>
-            <ToggleButton value="day" aria-label="Day calendar view">
-              <CalendarIcon fontSize="small" />
+            <ToggleButton value="day" aria-label="Day schedule view">
+              <DayIcon sx={{ fontSize: 18 }} /> Day
+            </ToggleButton>
+            <ToggleButton value="week" aria-label="Week calendar view">
+              <WeekIcon sx={{ fontSize: 18 }} /> Week
+            </ToggleButton>
+            <ToggleButton value="month" aria-label="Month calendar view">
+              <MonthIcon sx={{ fontSize: 18 }} /> Month
             </ToggleButton>
           </ToggleButtonGroup>
 
@@ -174,7 +195,7 @@ export default function QueueDashboard() {
         <StatsCards queue={queue} isLoading={isLoading} />
       </Box>
 
-      {/* Main content: queue table, day calendar, or empty/error state */}
+      {/* Main content: queue table, day/week/month calendar, or empty/error state */}
       {isError ? (
         <Paper sx={{ p: 4, textAlign: 'center' }}>
           <Typography color="error" gutterBottom>
@@ -201,6 +222,38 @@ export default function QueueDashboard() {
             isLoading={isLoading}
             onSlotClick={handleSlotClick}
             onUpdateStatus={handleUpdateStatus}
+          />
+        </motion.div>
+      ) : viewMode === 'week' ? (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.1 }}
+        >
+          <WeekCalendarView
+            queue={queue}
+            selectedDate={selectedDate}
+            isLoading={isLoading}
+            onSlotClick={handleSlotClick}
+            onUpdateStatus={handleUpdateStatus}
+            onDateChange={handleDateChange}
+          />
+        </motion.div>
+      ) : viewMode === 'month' ? (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.1 }}
+        >
+          <MonthCalendarView
+            queue={queue}
+            selectedDate={selectedDate}
+            isLoading={isLoading}
+            onDateChange={handleDateChange}
+            onViewDay={(date) => {
+              handleDateChange(date);
+              setViewMode('day');
+            }}
           />
         </motion.div>
       ) : !isLoading && queue.length === 0 ? (

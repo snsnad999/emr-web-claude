@@ -85,7 +85,7 @@ export default function PatientDetail() {
 
           <Box>
             {activeTab === 0 && patient && <OverviewTab patient={patient} />}
-            {activeTab === 1 && <PrescriptionHistoryTab patientId={patientId} />}
+            {activeTab === 1 && <PrescriptionHistoryTab patientId={patientId} patient={patient} />}
             {activeTab === 2 && <MedicalHistoryTab patientId={patientId} />}
             {activeTab === 3 && <AppointmentsTab patientId={patientId} />}
             {activeTab === 4 && <BillingTab patientId={patientId} />}

@@ -201,16 +201,28 @@ export type SymptomSeverity = 'mild' | 'moderate' | 'severe';
 export type Laterality = 'left' | 'right' | 'bilateral';
 export type PrescriptionLanguage = 'en' | 'hi' | 'mr' | 'gu';
 
+export interface VitalField {
+  value: string;
+  unit?: string;
+  unit_id?: number;
+  locked?: boolean;
+}
+
 export interface Vitals {
-  height?: { value: string; unit_id?: number };
-  weight?: { value: string; unit_id?: number };
+  height?: VitalField;
+  weight?: VitalField;
   bmi?: string;
-  bp?: { systolic: string; diastolic: string };
-  pulse?: { value: string; unit_id?: number };
+  bp?: { systolic: string; diastolic: string; unit?: string; unit_id?: number; locked?: boolean };
+  pulse?: VitalField;
   heartRate?: string;
-  temp?: { value: string; unit_id?: number };
+  temp?: VitalField;
   spo2?: string;
   rr?: string;
+  muscleMass?: VitalField;
+  headCircumference?: VitalField;
+  chestCircumference?: VitalField;
+  midArmCircumference?: VitalField;
+  waistCircumference?: VitalField;
 }
 
 export interface Symptom {
@@ -322,6 +334,8 @@ export interface Prescription {
   advice?: string;
   notes?: { surgicalNotes?: string; privateNotes?: string };
   customSections: CustomSection[];
+  medicalConditions?: Array<{ name: string; value: 'Y' | 'N' | '-'; since?: string; notes?: string }>;
+  noRelevantHistory?: boolean;
   sectionConfig?: {
     enabledSections: string[];
     printEnabledSections: string[];
@@ -488,6 +502,10 @@ export interface DropdownOption {
   option_value: string;
   option_key: string;
   applies_to?: string;
+  translations?: {
+    hi?: string;
+    mr?: string;
+  };
 }
 
 export interface DropdownOptions {
@@ -505,6 +523,10 @@ export interface DropdownOptions {
   };
   diagnosis: {
     status: DropdownOption[];
+  };
+  labresult?: {
+    interpretation: DropdownOption[];
+    unit: DropdownOption[];
   };
 }
 
@@ -765,4 +787,18 @@ export interface AnalyticsSummary {
   };
   services: Array<{ name: string; count: number; revenue: number }>;
   dailyTrend: Array<{ date: string; appointments: number; revenue: number; newPatients: number }>;
+}
+
+// ─── Bulk Import ────────────────────────────────────────────────────
+export type BulkImportSection = 'medication' | 'diagnosis' | 'symptom' | 'examination_finding' | 'lab_test' | 'lab_result';
+
+export interface BulkImportRow {
+  [key: string]: string;
+}
+
+export interface BulkImportValidationResult {
+  row: BulkImportRow;
+  rowIndex: number;
+  isValid: boolean;
+  errors: string[];
 }

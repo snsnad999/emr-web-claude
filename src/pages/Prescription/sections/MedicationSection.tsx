@@ -1,17 +1,21 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import {
   Box, TextField, Button, Autocomplete, IconButton, Grid, Chip,
   Table, TableHead, TableRow, TableCell, TableBody, MenuItem, Typography,
+  Paper, List, ListItemButton, ListItemText, CircularProgress, Divider,
 } from '@mui/material';
 import MedicationIcon from '@mui/icons-material/Medication';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
+import WhatshotIcon from '@mui/icons-material/Whatshot';
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
 import { useQuery } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import SectionHeader from '../components/SectionHeader';
 import { usePrescription } from '../context/PrescriptionContext';
 import { mastersApi } from '@/services/api';
+import { useFrequentlyUsed } from '@/hooks/useFrequentlyUsed';
 import type { Medication } from '@/types';
 
 const FORMS = ['Tablet', 'Capsule', 'Syrup', 'Injection', 'Cream', 'Ointment', 'Drops', 'Inhaler', 'Powder', 'Gel'];
@@ -28,11 +32,15 @@ const emptyMed: Medication = {
 export default function MedicationSection() {
   const {
     medications, addMedication, removeMedication, reorderMedications,
-    dropdownOptions, getTemplatesByType, addTemplate, deleteTemplate, applyTemplate,
+    dropdownOptions, getTemplatesByType, addTemplate, updateTemplate, deleteTemplate, applyTemplate,
   } = usePrescription();
   const ddMed = dropdownOptions?.medication;
   const [searchTerm, setSearchTerm] = useState('');
   const [newMed, setNewMed] = useState<Medication>({ ...emptyMed });
+  const [showFrequent, setShowFrequent] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const { items: frequentMeds, isLoading: loadingFrequent, fetchIfNeeded } = useFrequentlyUsed('medications');
 
   const { data: masterMeds } = useQuery({
     queryKey: ['masters', 'medications', searchTerm],
@@ -49,6 +57,9 @@ export default function MedicationSection() {
     strength: m.strength,
   })) || [];
 
+  const isMedicationAlreadyAdded = (brandName: string): boolean =>
+    medications.some(m => m.brandName.toLowerCase() === brandName.toLowerCase());
+
   const handleSelect = (opt: typeof medOptions[0] | null) => {
     if (opt) {
       setNewMed(prev => ({
@@ -63,9 +74,40 @@ export default function MedicationSection() {
 
   const handleAdd = () => {
     if (!newMed.brandName.trim()) return;
+    if (isMedicationAlreadyAdded(newMed.brandName)) {
+      toast.error(`"${newMed.brandName}" is already added`);
+      return;
+    }
     addMedication({ ...newMed });
     setNewMed({ ...emptyMed });
     setSearchTerm('');
+  };
+
+  const handleAddFromFrequent = (item: Record<string, unknown>) => {
+    const brandName = (item.brandName as string) || '';
+    if (isMedicationAlreadyAdded(brandName)) {
+      toast.error(`"${brandName}" is already added`);
+      return;
+    }
+    addMedication({
+      brandName,
+      genericName: (item.genericName as string) || '',
+      form: (item.form as string) || 'Tablet',
+      dosage: (item.dosage as string) || '',
+      frequency: (item.frequency as string) || 'Twice daily',
+      timing: (item.timing as string) || 'After meals',
+      duration: (item.duration as string) || '7 days',
+      qty: 0,
+      instructions: '',
+    });
+    setShowFrequent(false);
+  };
+
+  const handleInputFocus = () => {
+    if (!searchTerm) {
+      fetchIfNeeded();
+      setShowFrequent(true);
+    }
   };
 
   const handleDragEnd = useCallback((result: DropResult) => {
@@ -92,6 +134,9 @@ export default function MedicationSection() {
     );
   };
 
+  // Show frequent dropdown when input focused + empty, hide when typing
+  const showFrequentDropdown = showFrequent && !searchTerm && frequentMeds.length > 0;
+
   return (
     <SectionHeader
       id="medications"
@@ -101,6 +146,10 @@ export default function MedicationSection() {
       templateType="medication"
       templates={medicationTemplates}
       onSaveTemplate={handleSaveTemplate}
+      onUpdateTemplate={(id, name) => updateTemplate(id, name, 'medication', medications.map(m => ({
+        brandName: m.brandName, genericName: m.genericName, form: m.form,
+        dosage: m.dosage, frequency: m.frequency, timing: m.timing, duration: m.duration,
+      })))}
       onApplyTemplate={(id) => applyTemplate(id, 'medication')}
       onDeleteTemplate={(id) => deleteTemplate(id, 'medication')}
     >
@@ -108,22 +157,73 @@ export default function MedicationSection() {
         <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>Add Medication</Typography>
         <Grid container spacing={1.5}>
           <Grid size={{ xs: 12, sm: 6 }}>
-            <Autocomplete
-              freeSolo
-              options={medOptions}
-              getOptionLabel={opt => typeof opt === 'string' ? opt : opt.label}
-              inputValue={searchTerm}
-              onInputChange={(_, val) => {
-                setSearchTerm(val);
-                if (!medOptions.length) setNewMed(prev => ({ ...prev, brandName: val }));
-              }}
-              onChange={(_, val) => {
-                if (typeof val === 'string') setNewMed(prev => ({ ...prev, brandName: val }));
-                else handleSelect(val);
-              }}
-              renderInput={params => <TextField {...params} label="Drug Name" size="small" />}
-              size="small"
-            />
+            <Box sx={{ position: 'relative' }}>
+              <Autocomplete
+                freeSolo
+                options={medOptions}
+                getOptionLabel={opt => typeof opt === 'string' ? opt : opt.label}
+                inputValue={searchTerm}
+                onInputChange={(_, val) => {
+                  setSearchTerm(val);
+                  if (val) setShowFrequent(false);
+                  else setShowFrequent(true);
+                  if (!medOptions.length) setNewMed(prev => ({ ...prev, brandName: val }));
+                }}
+                onChange={(_, val) => {
+                  if (typeof val === 'string') setNewMed(prev => ({ ...prev, brandName: val }));
+                  else handleSelect(val);
+                  setShowFrequent(false);
+                }}
+                onFocus={handleInputFocus}
+                onBlur={() => setTimeout(() => setShowFrequent(false), 200)}
+                renderInput={params => (
+                  <TextField {...params} label="Drug Name" size="small" inputRef={inputRef} />
+                )}
+                size="small"
+              />
+              {/* Frequently used dropdown */}
+              {showFrequentDropdown && (
+                <Paper
+                  elevation={8}
+                  sx={{
+                    position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 20,
+                    maxHeight: 280, overflow: 'auto', mt: 0.5, border: '1px solid', borderColor: 'divider',
+                  }}
+                >
+                  <Box sx={{ px: 1.5, py: 1, display: 'flex', alignItems: 'center', gap: 0.5, bgcolor: 'grey.50' }}>
+                    <WhatshotIcon sx={{ fontSize: 16, color: 'warning.main' }} />
+                    <Typography variant="caption" fontWeight={600} color="text.secondary">
+                      Top Used Medications
+                    </Typography>
+                    {loadingFrequent && <CircularProgress size={12} sx={{ ml: 'auto' }} />}
+                  </Box>
+                  <Divider />
+                  <List dense disablePadding>
+                    {frequentMeds.map((item, idx) => {
+                      const bn = (item.brandName as string) || '';
+                      const gn = (item.genericName as string) || '';
+                      const already = isMedicationAlreadyAdded(bn);
+                      return (
+                        <ListItemButton
+                          key={idx}
+                          disabled={already}
+                          onClick={() => handleAddFromFrequent(item)}
+                          sx={{ py: 0.5 }}
+                        >
+                          <ListItemText
+                            primary={bn}
+                            secondary={gn || undefined}
+                            primaryTypographyProps={{ variant: 'body2', fontWeight: 500, color: already ? 'text.disabled' : 'text.primary' }}
+                            secondaryTypographyProps={{ variant: 'caption' }}
+                          />
+                          {already && <Chip label="Added" size="small" sx={{ height: 20, fontSize: 10 }} />}
+                        </ListItemButton>
+                      );
+                    })}
+                  </List>
+                </Paper>
+              )}
+            </Box>
           </Grid>
           <Grid size={{ xs: 6, sm: 3 }}>
             <TextField label="Generic Name" value={newMed.genericName} onChange={e => setNewMed(p => ({ ...p, genericName: e.target.value }))} size="small" fullWidth />

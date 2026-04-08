@@ -20,6 +20,9 @@ import PrescriptionCard from '@/pages/Prescription/PrescriptionCard';
 import AddPrescriptionPage from '@/pages/Prescription/AddPrescriptionPage';
 import Analytics from '@/pages/Analytics/Analytics';
 import Payments from '@/pages/Payments/Payments';
+import ProfilePage from '@/pages/Profile/ProfilePage';
+import BulkImportPage from '@/pages/Profile/BulkImportPage';
+import BulkImportUploadPage from '@/pages/Profile/BulkImportUploadPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -59,6 +62,9 @@ export default function App() {
                     <Route path="prescription-final" element={<AddPrescriptionPage />} />
                     <Route path="analytics" element={<Analytics />} />
                     <Route path="payments" element={<Payments />} />
+                    <Route path="profile" element={<ProfilePage />} />
+                    <Route path="profile/import-data" element={<BulkImportPage />} />
+                    <Route path="profile/import-data/:section" element={<BulkImportUploadPage />} />
                   </Route>
 
                   {/* Catch-all */}

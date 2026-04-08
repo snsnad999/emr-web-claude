@@ -4,8 +4,8 @@
  */
 import { prescriptionApi, templatesApi, printSettingsApi } from '@/services/api';
 import type {
-  DropdownOptions, PrescriptionTemplate, PatientInfo,
-  PrescriptionVitals, Vitals, Symptom, Diagnosis, Medication,
+  DropdownOption, DropdownOptions, PrescriptionTemplate, PatientInfo,
+  PrescriptionVitals, Vitals, VitalUnitsMap, Symptom, Diagnosis, Medication,
   LabInvestigation, LabResult, ExaminationFinding, ProcedureEntry,
   FollowUp, Referral, CustomSection, PrescriptionLanguage,
 } from '@/types';
@@ -60,6 +60,16 @@ export async function fetchAllTemplates(): Promise<PrescriptionTemplate[]> {
   }
 }
 
+export async function fetchVitalUnits(): Promise<VitalUnitsMap | null> {
+  try {
+    const res = await prescriptionApi.getVitalUnits();
+    return (res.data as { units: VitalUnitsMap })?.units || null;
+  } catch (e) {
+    console.error('[Prescription] Failed to fetch vital units:', e);
+    return null;
+  }
+}
+
 export async function fetchPatientDetail(patientId: string): Promise<{
   patientInfo: PatientInfo;
   lockedVitals: PrescriptionVitals | null;
@@ -78,11 +88,17 @@ export async function fetchPatientDetail(patientId: string): Promise<{
         address: d.rawData?.address || '',
       },
       lockedVitals: d.lockedVitals || null,
-      medicalHistory: (d.medicalHistory || []).map((h) => ({
-        name: h.condition_name || (h as Record<string, unknown>).name as string || '',
-        value: (h.value === 1 ? 'Y' : h.value === 0 ? 'N' : '-') as 'Y' | 'N' | '-',
-        since: h.since || '',
-      })),
+      medicalHistory: (d.medicalHistory?.conditions || []).map((h: Record<string, unknown>) => {
+        const raw = h.value;
+        let val: 'Y' | 'N' | '-' = '-';
+        if (raw === 'Y' || raw === 1) val = 'Y';
+        else if (raw === 'N' || raw === 0) val = 'N';
+        return {
+          name: (h.condition_name as string) || (h.name as string) || '',
+          value: val,
+          since: (h.since as string) || '',
+        };
+      }),
     };
   } catch (e) {
     console.error('[Prescription] Failed to fetch patient detail:', e);
@@ -149,6 +165,30 @@ export async function createSectionTemplate(
   } catch (e) {
     console.error(`[Prescription] Failed to create ${type} template:`, e);
     return null;
+  }
+}
+
+export async function updateSectionTemplate(
+  templateId: string,
+  name: string,
+  type: string,
+  items: Record<string, unknown>[],
+): Promise<boolean> {
+  try {
+    await templatesApi.updateTemplate({
+      template_id: templateId,
+      organization_id: DEV_ORG,
+      branch_id: DEV_BRANCH,
+      doctor_id: DEV_DOCTOR,
+      name,
+      type,
+      items,
+      updated_by: DEV_DOCTOR,
+    });
+    return true;
+  } catch (e) {
+    console.error(`[Prescription] Failed to update template ${templateId}:`, e);
+    return false;
   }
 }
 
@@ -229,8 +269,47 @@ export function buildSubmitPayload(
     advice: data.advice,
     notes: data.notes,
     customSections: data.customSections,
+    medicalConditions: data.medicalConditions,
+    noRelevantHistory: data.noRelevantHistory,
     sectionConfig: data.sectionConfig,
     language: data.language,
     created_by: DEV_DOCTOR,
   };
+}
+
+// ─── Translation Resolver ──────────────────────────────────────────
+/**
+ * Resolves a dropdown option ID to the appropriate translated text.
+ * - For 'en', returns option_value (English label).
+ * - For 'hi'/'mr', returns the translation if available, otherwise falls back to English.
+ */
+export function resolveDropdownTranslated(
+  id: number | undefined | null,
+  options: DropdownOption[] | undefined,
+  language: PrescriptionLanguage = 'en',
+): string {
+  if (!id || !options) return '';
+  const opt = options.find(o => o.dropdown_option_id === id);
+  if (!opt) return '';
+  if (language === 'en') return opt.option_value;
+  const translated = opt.translations?.[language as 'hi' | 'mr'];
+  return translated || opt.option_value;
+}
+
+/**
+ * Resolves a plain English text value to its translation by matching option_value.
+ * Used when the value is stored as a string (e.g. diagnosis status "Confirmed")
+ * rather than an ID.
+ */
+export function resolveTextTranslated(
+  value: string | undefined | null,
+  options: DropdownOption[] | undefined,
+  language: PrescriptionLanguage = 'en',
+): string {
+  if (!value) return '';
+  if (language === 'en' || !options) return value;
+  const opt = options.find(o => o.option_value === value);
+  if (!opt) return value;
+  const translated = opt.translations?.[language as 'hi' | 'mr'];
+  return translated || value;
 }

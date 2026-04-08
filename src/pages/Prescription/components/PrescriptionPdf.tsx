@@ -10,6 +10,7 @@ import type {
   Vitals, Symptom, Diagnosis, Medication, LabInvestigation,
   LabResult, ExaminationFinding, ProcedureEntry, FollowUp,
   Referral, CustomSection, DropdownOptions, PatientInfo,
+  PrescriptionLanguage, DropdownOption,
 } from '@/types';
 import type { MedicalCondition } from '../context/PrescriptionContext';
 
@@ -38,6 +39,7 @@ export interface PrescriptionPdfProps {
   patientInfo?: PatientInfo | null;
   dropdownOptions?: DropdownOptions | null;
   printSettings?: Record<string, boolean> | null;
+  language?: PrescriptionLanguage;
   onPdfReady?: (dataUrl: string) => void;
 }
 
@@ -56,9 +58,39 @@ async function loadImageAsBase64(url: string): Promise<string> {
 
 // ─── Helpers ──────────────────────────────────────────────────────────
 
-function resolveDD(id: number | undefined | null, opts: { dropdown_option_id: number; option_value: string }[] | undefined): string {
-  if (!id || !opts) return '';
-  return opts.find(o => o.dropdown_option_id === id)?.option_value || '';
+function resolveDD(id: number | undefined | null, opts: DropdownOption[] | undefined, lang: PrescriptionLanguage = 'en', fallback?: string): string {
+  if (id && opts) {
+    const opt = opts.find(o => o.dropdown_option_id === id);
+    if (opt) {
+      if (lang !== 'en') {
+        const translated = opt.translations?.[lang as 'hi' | 'mr'];
+        if (translated) return translated;
+      }
+      return opt.option_value;
+    }
+  }
+  // Fallback: translate by matching the English text
+  if (fallback) return resolveTextDD(fallback, opts, lang);
+  return '';
+}
+
+function resolveTextDD(value: string | undefined | null, opts: DropdownOption[] | undefined, lang: PrescriptionLanguage = 'en'): string {
+  if (!value) return '';
+  if (lang === 'en' || !opts) return value;
+  const opt = opts.find(o => o.option_value === value);
+  if (!opt) return value;
+  return opt.translations?.[lang as 'hi' | 'mr'] || value;
+}
+
+const DIAGNOSIS_TYPE_TRANSLATIONS: Record<string, Record<string, string>> = {
+  Primary:      { hi: 'प्राथमिक',  mr: 'प्राथमिक' },
+  Secondary:    { hi: 'द्वितीयक',  mr: 'दुय्यम' },
+  Differential: { hi: 'विभेदक',    mr: 'विभेदक' },
+};
+
+function translateDiagType(type: string, lang: PrescriptionLanguage): string {
+  if (lang === 'en') return type;
+  return DIAGNOSIS_TYPE_TRANSLATIONS[type]?.[lang] || type;
 }
 
 function formatDate(d?: Date): string {
@@ -90,7 +122,7 @@ function dataKey(data: PrescriptionPdfData | null): string {
 
 // ─── Component ────────────────────────────────────────────────────────
 
-export default function PrescriptionPdf({ data, patientInfo, dropdownOptions, printSettings, onPdfReady }: PrescriptionPdfProps) {
+export default function PrescriptionPdf({ data, patientInfo, dropdownOptions, printSettings, language = 'en', onPdfReady }: PrescriptionPdfProps) {
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -112,8 +144,11 @@ export default function PrescriptionPdf({ data, patientInfo, dropdownOptions, pr
   const printSettingsRef = useRef(printSettings);
   printSettingsRef.current = printSettings;
 
-  // Stable key — only re-generate when data or printSettings actually changes (by value)
-  const stableKey = dataKey(data) + JSON.stringify(printSettings || {});
+  const languageRef = useRef(language);
+  languageRef.current = language;
+
+  // Stable key — only re-generate when data, printSettings, or language actually changes (by value)
+  const stableKey = dataKey(data) + JSON.stringify(printSettings || {}) + language;
 
   const generatePdf = useCallback(async () => {
     const currentData = dataRef.current;
@@ -134,7 +169,15 @@ export default function PrescriptionPdf({ data, patientInfo, dropdownOptions, pr
         loadImageAsBase64('/footer.png').catch(() => null),
       ]);
 
-      const content = buildContent(currentData, patientInfoRef.current || null, ddRef.current || null, printSettingsRef.current || null);
+      const currentLang = languageRef.current;
+      const content = buildContent(currentData, patientInfoRef.current || null, ddRef.current || null, printSettingsRef.current || null, currentLang);
+
+      // Use Devanagari font for Hindi/Marathi — Roboto lacks Devanagari glyphs
+      const pdfFont = currentLang === 'hi' || currentLang === 'mr'
+        ? 'NotoSansDevanagari'
+        : currentLang === 'gu'
+        ? 'MuktaVaani'
+        : 'Roboto';
 
       // A4 = 595pt wide. Image width = 595 - 2*30 = 535pt
       const pageWidth = 595;
@@ -143,7 +186,7 @@ export default function PrescriptionPdf({ data, patientInfo, dropdownOptions, pr
 
       const docDefinition = {
         pageSize: 'A4' as const,
-        pageMargins: [30, headerImg ? 130 : 40, 30, footerImg ? 90 : 40] as [number, number, number, number],
+        pageMargins: [30, headerImg ? 150 : 40, 30, footerImg ? 90 : 40] as [number, number, number, number],
         header: headerImg
           ? { image: headerImg, width: imgWidth, margin: [hMargin, 8, hMargin, 0] }
           : undefined,
@@ -152,7 +195,7 @@ export default function PrescriptionPdf({ data, patientInfo, dropdownOptions, pr
           : undefined,
         content,
         styles: pdfStyles,
-        defaultStyle: { font: 'Roboto', bold: false },
+        defaultStyle: { font: pdfFont, bold: false },
       };
 
       const pdf = pdfMake.createPdf(docDefinition);
@@ -239,6 +282,7 @@ function buildContent(
   patient: PatientInfo | null,
   ddOpts: DropdownOptions | null,
   printSettings: Record<string, boolean> | null,
+  lang: PrescriptionLanguage = 'en',
 ): PdfContent[] {
   const content: PdfContent[] = [];
   const now = new Date();
@@ -321,9 +365,11 @@ function buildContent(
     data.symptoms.forEach((s, i) => {
       if (i > 0) symLine.push({ text: '  |  ', style: 'contentTextSeparator' });
       symLine.push({ text: s.name, style: 'contentTextBold' });
-      const sev = resolveDD(s.severity_id, ddOpts?.symptoms?.severity) || s.severity || '';
+      const sev = resolveDD(s.severity_id, ddOpts?.symptoms?.severity, lang, s.severity) || '';
       if (sev) symLine.push({ text: ` [${sev}]`, style: 'contentTextItalic' });
       if (s.duration) symLine.push({ text: ` (${s.duration})`, style: 'contentText' });
+      const lat = resolveDD(s.laterality_id, ddOpts?.symptoms?.laterality, lang, s.laterality) || '';
+      if (lat) symLine.push({ text: ` (${lat})`, style: 'contentTextItalic' });
     });
     content.push({ text: symLine, margin: [0, 0, 0, 4] });
   }
@@ -334,9 +380,8 @@ function buildContent(
     data.diagnoses.forEach((d, i) => {
       if (i > 0) diagLine.push({ text: '  |  ', style: 'contentTextSeparator' });
       diagLine.push({ text: d.description, style: 'contentTextBold' });
-      const code = d.icdCode || d.icd_code;
-      if (code) diagLine.push({ text: ` (${code})`, style: 'contentTextItalic' });
-      diagLine.push({ text: ` — ${d.status}`, style: 'contentText' });
+      diagLine.push({ text: ` — ${resolveTextDD(d.status, ddOpts?.diagnosis?.status, lang)}`, style: 'contentText' });
+      if (d.type) diagLine.push({ text: ` [${translateDiagType(d.type, lang)}]`, style: 'contentTextItalic' });
     });
     content.push({ text: diagLine, margin: [0, 0, 0, 4] });
   }
@@ -377,10 +422,10 @@ function buildContent(
     ];
 
     const medRows = data.medications.map((m, i) => {
-      const dosage = resolveDD(m.dosage_id, medDD?.dosage) || m.dosage || '-';
-      const freq = resolveDD(m.frequency_id, medDD?.frequency) || m.frequency || '-';
-      const dur = resolveDD(m.duration_id, medDD?.duration) || m.duration || '-';
-      const timing = resolveDD(m.timing_id, medDD?.timing) || m.timing || '';
+      const dosage = resolveDD(m.dosage_id, medDD?.dosage, lang, m.dosage) || '-';
+      const freq = resolveDD(m.frequency_id, medDD?.frequency, lang, m.frequency) || '-';
+      const dur = resolveDD(m.duration_id, medDD?.duration, lang, m.duration) || '-';
+      const timing = resolveDD(m.timing_id, medDD?.timing, lang, m.timing) || '';
       const instructions = timing || m.instructions || '-';
 
       const nameCell: PdfContent[] = [{ text: m.brandName, style: 'medicationName' }];
@@ -390,7 +435,7 @@ function buildContent(
       return [
         { text: `${i + 1}`, style: 'contentTextTable', alignment: 'center' as const },
         { text: nameCell },
-        { text: `${dosage}${m.form ? ` ${m.form}` : ''}`, style: 'contentTextTable', alignment: 'center' as const },
+        { text: dosage, style: 'contentTextTable', alignment: 'center' as const },
         { text: freq, style: 'contentTextTable', alignment: 'center' as const },
         { text: dur, style: 'contentTextTable', alignment: 'center' as const },
         { text: instructions, style: 'contentTextTable', alignment: 'left' as const },
@@ -482,19 +527,21 @@ function buildContent(
     const resultRows = [
       [
         { text: 'Test', style: 'tableHeader' },
-        { text: 'Result', style: 'tableHeader' },
+        { text: 'Reading', style: 'tableHeader' },
+        { text: 'Unit', style: 'tableHeader' },
         { text: 'Normal', style: 'tableHeader' },
         { text: 'Status', style: 'tableHeader' },
       ],
       ...data.labResults.map(r => [
         { text: r.testName, style: 'contentTextTable' },
-        { text: `${r.reading} ${r.unit}`, style: 'contentTextTable', bold: true },
+        { text: r.reading, style: 'contentTextTable', bold: true },
+        { text: r.unit, style: 'contentTextTable' },
         { text: r.normalRange, style: 'contentTextTable' },
-        { text: r.interpretation || 'Pending', style: 'contentTextTable' },
+        { text: resolveTextDD(r.interpretation, ddOpts?.labresult?.interpretation, lang) || 'Pending', style: 'contentTextTable' },
       ]),
     ];
     rightCol.push({
-      table: { headerRows: 1, widths: ['30%', '25%', '25%', '20%'], body: resultRows },
+      table: { headerRows: 1, widths: ['25%', '18%', '15%', '22%', '20%'], body: resultRows },
       layout: 'prescriptionTableLayout',
       margin: [0, 0, 0, 4],
     });
@@ -587,6 +634,7 @@ export async function generateAndDownloadPdf(
   dropdownOptions: DropdownOptions | null,
   filename: string,
   printSettings?: Record<string, boolean> | null,
+  language: PrescriptionLanguage = 'en',
 ) {
   const [headerImg, footerImg] = await Promise.all([
     loadImageAsBase64('/header.png').catch(() => null),
@@ -597,7 +645,8 @@ export async function generateAndDownloadPdf(
   const imgWidth = 535;
   const hMargin = (pageWidth - imgWidth) / 2;
 
-  const content = buildContent(data, patientInfo, dropdownOptions, printSettings || null);
+  const pdfFont = (language === 'hi' || language === 'mr') ? 'NotoSansDevanagari' : 'Roboto';
+  const content = buildContent(data, patientInfo, dropdownOptions, printSettings || null, language);
   const docDefinition = {
     pageSize: 'A4' as const,
     pageMargins: [30, headerImg ? 130 : 40, 30, footerImg ? 90 : 40] as [number, number, number, number],
@@ -609,7 +658,7 @@ export async function generateAndDownloadPdf(
       : undefined,
     content,
     styles: pdfStyles,
-    defaultStyle: { font: 'Roboto', bold: false },
+    defaultStyle: { font: pdfFont, bold: false },
   };
   const pdf = pdfMake.createPdf(docDefinition);
   pdf.download(filename);

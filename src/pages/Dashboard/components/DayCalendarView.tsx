@@ -261,15 +261,40 @@ export default function DayCalendarView({
                 }}
               >
                 {entries.length > 0 ? (
-                  entries.map((entry) => (
-                    <PatientCard
-                      key={entry.queueId}
-                      entry={entry}
-                      onStart={() => navigate(`/visit-details/${entry.patientId}`)}
-                      onComplete={() => onUpdateStatus(entry.queueId, 'Completed')}
-                      onCancel={() => onUpdateStatus(entry.queueId, 'Cancelled')}
-                    />
-                  ))
+                  <>
+                    {entries.map((entry) => (
+                      <PatientCard
+                        key={entry.queueId}
+                        entry={entry}
+                        onStart={() => navigate(`/visit-details/${entry.patientId}`)}
+                        onComplete={() => onUpdateStatus(entry.queueId, 'Completed')}
+                        onCancel={() => onUpdateStatus(entry.queueId, 'Cancelled')}
+                      />
+                    ))}
+                    {!past && (
+                      <Tooltip title="Add another patient to this slot">
+                        <IconButton
+                          size="small"
+                          onClick={() => onSlotClick(slot)}
+                          sx={{
+                            border: '1px dashed',
+                            borderColor: 'divider',
+                            borderRadius: 2,
+                            width: 32,
+                            height: 32,
+                            color: 'text.secondary',
+                            '&:hover': {
+                              borderColor: 'primary.main',
+                              color: 'primary.main',
+                              bgcolor: (theme) => alpha(theme.palette.primary.main, 0.06),
+                            },
+                          }}
+                        >
+                          <AddIcon sx={{ fontSize: 18 }} />
+                        </IconButton>
+                      </Tooltip>
+                    )}
+                  </>
                 ) : !past ? (
                   <Tooltip title="Book this slot">
                     <Button
