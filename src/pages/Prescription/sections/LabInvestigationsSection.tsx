@@ -9,9 +9,11 @@ import AddIcon from '@mui/icons-material/Add';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
 import { useQuery } from '@tanstack/react-query';
+import { format, isValid } from 'date-fns';
+import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
+import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import SectionHeader from '../components/SectionHeader';
 import InlineEditableName, { type SearchOption } from '../components/InlineEditableName';
-import InlineEditableCell from '../components/InlineEditableCell';
 import { usePrescription } from '../context/PrescriptionContext';
 import { mastersApi } from '@/services/api';
 import type { LabInvestigation } from '@/types';
@@ -80,6 +82,7 @@ export default function LabInvestigationsSection() {
   };
 
   return (
+    <LocalizationProvider dateAdapter={AdapterDateFns}>
     <SectionHeader
       id="labInvestigations"
       title="Lab Investigations"
@@ -114,10 +117,10 @@ export default function LabInvestigationsSection() {
             <TableRow>
               <TableCell sx={{ width: 36, p: 0.5 }} />
               <TableCell>Test Name</TableCell>
-              <TableCell sx={{ width: 130 }}>Category</TableCell>
-              <TableCell sx={{ width: 130 }}>Test Date</TableCell>
-              <TableCell sx={{ width: 130 }}>Repeat Date</TableCell>
-              <TableCell sx={{ width: 150 }}>Remarks</TableCell>
+              <TableCell sx={{ width: 160 }}>Category</TableCell>
+              <TableCell sx={{ width: 160 }}>Test Date</TableCell>
+              <TableCell sx={{ width: 160 }}>Repeat Date</TableCell>
+              <TableCell sx={{ width: 180 }}>Remarks</TableCell>
               <TableCell sx={{ width: 70 }}>Urgent</TableCell>
               <TableCell sx={{ width: 44 }} />
             </TableRow>
@@ -161,27 +164,54 @@ export default function LabInvestigationsSection() {
                             />
                           </TableCell>
                           <TableCell>
-                            <InlineEditableCell
+                            <TextField
                               value={lab.category || ''}
+                              size="small"
+                              fullWidth
                               placeholder="Category"
-                              onChange={(val) => updateLabInvestigation(i, { ...lab, category: val || undefined })}
+                              sx={{ m: 0, '& .MuiInputBase-root': { height: 32, fontSize: 13 }, '& .MuiInputBase-input': { py: 0.25, px: 0.75 } }}
+                              onChange={(e) => updateLabInvestigation(i, { ...lab, category: e.target.value || undefined })}
                             />
                           </TableCell>
                           <TableCell>
-                            <TextField type="date" value={lab.testOn || ''} size="small" fullWidth
-                              slotProps={{ inputLabel: { shrink: true } }}
-                              sx={{ m: 0, '& .MuiInputBase-root': { height: 30, fontSize: 13 }, '& .MuiInputBase-input': { py: 0.25, px: 0.75 } }}
-                              onChange={e => updateLabInvestigation(i, { ...lab, testOn: e.target.value })} />
+                            <DatePicker
+                              format="dd/MM/yyyy"
+                              value={lab.testOn ? new Date(lab.testOn + 'T00:00:00') : null}
+                              onChange={(newVal) => {
+                                if (!newVal) { updateLabInvestigation(i, { ...lab, testOn: undefined }); return; }
+                                if (!isValid(newVal)) return;
+                                updateLabInvestigation(i, { ...lab, testOn: format(newVal, 'yyyy-MM-dd') });
+                              }}
+                              slotProps={{
+                                textField: {
+                                  size: 'small',
+                                  fullWidth: true,
+                                  sx: { m: 0, '& .MuiInputBase-root': { height: 32, fontSize: 13 }, '& .MuiInputBase-input': { py: 0.25, px: 0.75 } },
+                                },
+                              }}
+                            />
                           </TableCell>
                           <TableCell>
-                            <TextField type="date" value={lab.repeatOn || ''} size="small" fullWidth
-                              slotProps={{ inputLabel: { shrink: true } }}
-                              sx={{ m: 0, '& .MuiInputBase-root': { height: 30, fontSize: 13 }, '& .MuiInputBase-input': { py: 0.25, px: 0.75 } }}
-                              onChange={e => updateLabInvestigation(i, { ...lab, repeatOn: e.target.value })} />
+                            <DatePicker
+                              format="dd/MM/yyyy"
+                              value={lab.repeatOn ? new Date(lab.repeatOn + 'T00:00:00') : null}
+                              onChange={(newVal) => {
+                                if (!newVal) { updateLabInvestigation(i, { ...lab, repeatOn: undefined }); return; }
+                                if (!isValid(newVal)) return;
+                                updateLabInvestigation(i, { ...lab, repeatOn: format(newVal, 'yyyy-MM-dd') });
+                              }}
+                              slotProps={{
+                                textField: {
+                                  size: 'small',
+                                  fullWidth: true,
+                                  sx: { m: 0, '& .MuiInputBase-root': { height: 32, fontSize: 13 }, '& .MuiInputBase-input': { py: 0.25, px: 0.75 } },
+                                },
+                              }}
+                            />
                           </TableCell>
                           <TableCell>
                             <TextField value={lab.remarks || ''} size="small" fullWidth placeholder="Remarks"
-                              sx={{ m: 0, '& .MuiInputBase-root': { height: 30, fontSize: 13 }, '& .MuiInputBase-input': { py: 0.25, px: 0.75 } }}
+                              sx={{ m: 0, '& .MuiInputBase-root': { height: 32, fontSize: 13 }, '& .MuiInputBase-input': { py: 0.25, px: 0.75 } }}
                               onChange={e => updateLabInvestigation(i, { ...lab, remarks: e.target.value })} />
                           </TableCell>
                           <TableCell>
@@ -208,5 +238,6 @@ export default function LabInvestigationsSection() {
         </Table>
       )}
     </SectionHeader>
+    </LocalizationProvider>
   );
 }

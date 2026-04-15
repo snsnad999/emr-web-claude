@@ -15,6 +15,7 @@ import { queueApi } from '@/services/api';
 import { useAuth } from '@/context/AuthContext';
 import type { RootState } from '@/store/store';
 import { setSelectedDate } from '@/store/slices/selectedDateSlice';
+import { useCurrentDate } from '@/hooks/useCurrentDate';
 import type { QueueStatus } from '@/types';
 
 import DateSelector from './components/DateSelector';
@@ -26,7 +27,8 @@ import DayCalendarView from './components/DayCalendarView';
 import WeekCalendarView from './components/WeekCalendarView';
 import MonthCalendarView from './components/MonthCalendarView';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { startOfWeek, addDays, startOfMonth, endOfMonth, endOfWeek, format } from 'date-fns';
 
 type ViewMode = 'queue' | 'day' | 'week' | 'month';
 
@@ -35,9 +37,22 @@ export default function QueueDashboard() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const selectedDate = useSelector((state: RootState) => state.selectedDate.date);
+  const todayStr = useCurrentDate();
+  const isPastDate = selectedDate < todayStr;
+  const prevTodayRef = useRef<string>(todayStr);
   const [bookingOpen, setBookingOpen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('queue');
   const [preselectedSlot, setPreselectedSlot] = useState<string | undefined>(undefined);
+
+  // Auto-advance selectedDate at midnight: when the local day rolls over,
+  // if the user was sitting on the previous "today", move them to the new today.
+  useEffect(() => {
+    const prevToday = prevTodayRef.current;
+    if (todayStr !== prevToday && selectedDate === prevToday) {
+      dispatch(setSelectedDate(todayStr));
+    }
+    prevTodayRef.current = todayStr;
+  }, [todayStr, selectedDate, dispatch]);
 
   const {
     data: queueData,
@@ -62,12 +77,51 @@ export default function QueueDashboard() {
 
   const queue = queueData?.data?.queue ?? [];
 
+  // Compute the date range that Week/Month views need to cover.
+  const rangeForView = useMemo(() => {
+    if (viewMode !== 'week' && viewMode !== 'month') return null;
+    const base = new Date(selectedDate + 'T00:00:00');
+    if (viewMode === 'week') {
+      const ws = startOfWeek(base, { weekStartsOn: 1 });
+      return {
+        from: format(ws, 'yyyy-MM-dd'),
+        to: format(addDays(ws, 6), 'yyyy-MM-dd'),
+      };
+    }
+    // month view — calendar grid extends to full weeks around the month
+    const ms = startOfMonth(base);
+    const me = endOfMonth(base);
+    return {
+      from: format(startOfWeek(ms, { weekStartsOn: 1 }), 'yyyy-MM-dd'),
+      to: format(endOfWeek(me, { weekStartsOn: 1 }), 'yyyy-MM-dd'),
+    };
+  }, [viewMode, selectedDate]);
+
+  // Second query — fetches the full visible range for Week/Month views so every
+  // day's appointments render, not just the selected date.
+  const { data: rangeQueueData, isLoading: isRangeLoading } = useQuery({
+    queryKey: ['queue-range', rangeForView?.from, rangeForView?.to, user?.organizationId, user?.branchId],
+    queryFn: () =>
+      queueApi.getQueue({
+        organizationId: user!.organizationId,
+        branchId: user!.branchId,
+        dateFrom: rangeForView!.from,
+        dateTo: rangeForView!.to,
+      }),
+    enabled: !!user?.organizationId && !!user?.branchId && !!rangeForView,
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  });
+
+  const rangeQueue = rangeQueueData?.data?.queue ?? [];
+
   const updateStatusMutation = useMutation({
     mutationFn: ({ queueId, status }: { queueId: string; status: QueueStatus }) =>
       queueApi.updateQueueEntry(queueId, { status }),
     onSuccess: () => {
       toast.success('Queue updated');
       queryClient.invalidateQueries({ queryKey: ['queue'] });
+      queryClient.invalidateQueries({ queryKey: ['queue-range'] });
     },
     onError: () => {
       toast.error('Failed to update queue');
@@ -83,9 +137,13 @@ export default function QueueDashboard() {
   };
 
   const handleSlotClick = useCallback((slot: string) => {
+    if (isPastDate) {
+      toast.error('This date is in the past — booking is disabled');
+      return;
+    }
     setPreselectedSlot(slot);
     setBookingOpen(true);
-  }, []);
+  }, [isPastDate]);
 
   const handleBookingClose = useCallback(() => {
     setBookingOpen(false);
@@ -173,10 +231,14 @@ export default function QueueDashboard() {
             variant="contained"
             startIcon={<AddIcon />}
             onClick={() => setBookingOpen(true)}
+            disabled={isPastDate}
+            title={isPastDate ? 'Past dates are read-only — cannot book or check-in' : undefined}
           >
-            {selectedDate === new Date().toISOString().split('T')[0]
-              ? 'Check-in / Book'
-              : 'Book Appointment'}
+            {isPastDate
+              ? 'Read-only (past date)'
+              : selectedDate === todayStr
+                ? 'Check-in / Book'
+                : 'Book Appointment'}
           </Button>
         </Box>
       </Box>
@@ -222,9 +284,9 @@ export default function QueueDashboard() {
           transition={{ duration: 0.4, delay: 0.1 }}
         >
           <WeekCalendarView
-            queue={queue}
+            queue={rangeQueue}
             selectedDate={selectedDate}
-            isLoading={isLoading}
+            isLoading={isRangeLoading}
             onSlotClick={handleSlotClick}
             onUpdateStatus={handleUpdateStatus}
             onDateChange={handleDateChange}
@@ -237,9 +299,9 @@ export default function QueueDashboard() {
           transition={{ duration: 0.4, delay: 0.1 }}
         >
           <MonthCalendarView
-            queue={queue}
+            queue={rangeQueue}
             selectedDate={selectedDate}
-            isLoading={isLoading}
+            isLoading={isRangeLoading}
             onDateChange={handleDateChange}
             onViewDay={(date) => {
               handleDateChange(date);

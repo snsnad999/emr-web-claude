@@ -1,8 +1,8 @@
-import { useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
+import { format } from 'date-fns';
 import {
   Box,
   Typography,
-  TextField,
   Button,
   Paper,
   Table,
@@ -15,14 +15,10 @@ import {
   Chip,
   Avatar,
   Skeleton,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
-  Badge,
 } from '@mui/material';
 import {
   PersonAdd as PersonAddIcon,
-  ExpandMore as ExpandMoreIcon,
+  KeyboardArrowDown as KeyboardArrowDownIcon,
 } from '@mui/icons-material';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -30,8 +26,10 @@ import { motion } from 'framer-motion';
 
 import { patientApi } from '@/services/api';
 import { useAuth } from '@/context/AuthContext';
+import { useCurrentDate } from '@/hooks/useCurrentDate';
 import type { Patient } from '@/types';
 import RegisterPatientDialog from './components/RegisterPatientDialog';
+import DateRangePickerInput from '@/components/DateRangePickerInput';
 
 function getAge(dob: string): string {
   if (!dob) return '-';
@@ -47,18 +45,31 @@ function genderLabel(g: string): string {
   return 'Other';
 }
 
-function formatGroupDate(iso: string): string {
-  const d = new Date(iso);
-  const today = new Date();
-  const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  const sameDay = (a: Date, b: Date) =>
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate();
-  if (sameDay(d, today)) return 'Today';
-  if (sameDay(d, yesterday)) return 'Yesterday';
-  return d.toLocaleDateString(undefined, { weekday: 'long', day: '2-digit', month: 'short', year: 'numeric' });
+function formatGroupDate(localDay: string): string {
+  // localDay is 'yyyy-MM-dd' in local time. Format: "14 Apr 2026".
+  if (!localDay || localDay === 'unknown') return 'Unknown';
+  const [y, m, d] = localDay.split('-').map(Number);
+  const dt = new Date(y, m - 1, d);
+  return format(dt, 'dd MMM yyyy');
 }
+
+const HEADER_CELL_SX = {
+  fontWeight: 600,
+  color: '#fff',
+  bgcolor: '#0D7C66',
+  borderBottom: '2px solid',
+  borderColor: 'divider',
+};
+
+const COL_WIDTHS = {
+  uhid: '12%',
+  name: '22%',
+  age: '11%',
+  phone: '13%',
+  blood: '10%',
+  tags: '18%',
+  regOn: '14%',
+};
 
 function SkeletonRows() {
   return (
@@ -74,25 +85,41 @@ function SkeletonRows() {
   );
 }
 
-const HEADER_CELL_SX = {
-  fontWeight: 600,
-  color: '#fff',
-  borderBottom: '2px solid',
-  borderColor: 'divider',
-};
-
 export default function PatientList() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [searchParams] = useSearchParams();
   const globalSearch = searchParams.get('search')?.trim() ?? '';
-  const todayStr = new Date().toISOString().split('T')[0];
-  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  const todayStr = useCurrentDate();
+  const sevenDaysAgoStr = useMemo(
+    () => format(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), 'yyyy-MM-dd'),
+    [todayStr],
+  );
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(50);
   const [registerOpen, setRegisterOpen] = useState(false);
-  const [dateFrom, setDateFrom] = useState(sevenDaysAgo);
+  const [dateFrom, setDateFrom] = useState(sevenDaysAgoStr);
   const [dateTo, setDateTo] = useState(todayStr);
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+
+  const toggleGroup = (day: string) => {
+    setOpenGroups((prev) => ({ ...prev, [day]: !prev[day] }));
+  };
+
+  // Auto-advance the filter range when the local day rolls over (midnight).
+  // If the user was viewing the default window ending at yesterday's "today",
+  // slide it forward to include the new today.
+  useEffect(() => {
+    setDateTo((prev) => {
+      // Only auto-advance if the user hadn't pinned it to a past date manually.
+      if (prev < todayStr) return todayStr;
+      return prev;
+    });
+    setDateFrom((prev) => {
+      if (prev < sevenDaysAgoStr) return prev; // user picked an older start manually; keep it
+      return sevenDaysAgoStr;
+    });
+  }, [todayStr, sevenDaysAgoStr]);
 
   const { data, isLoading } = useQuery({
     queryKey: ['patients', page, rowsPerPage, user?.organizationId, dateFrom, dateTo, globalSearch],
@@ -116,19 +143,13 @@ export default function PatientList() {
   const grouped = useMemo(() => {
     const byDay = new Map<string, Patient[]>();
     for (const p of patients) {
-      const key = p.createdAt ? new Date(p.createdAt).toISOString().split('T')[0] : 'unknown';
+      const key = p.createdAt ? format(new Date(p.createdAt), 'yyyy-MM-dd') : 'unknown';
       const arr = byDay.get(key) ?? [];
       arr.push(p);
       byDay.set(key, arr);
     }
     return Array.from(byDay.entries()).sort(([a], [b]) => (a < b ? 1 : -1));
   }, [patients]);
-
-  const [expandedDay, setExpandedDay] = useState<string | null>(null);
-
-  // Auto-expand the first (newest) group when data loads.
-  const defaultExpanded = grouped[0]?.[0] ?? null;
-  const currentExpanded = expandedDay ?? defaultExpanded;
 
   const renderRow = (patient: Patient) => (
     <TableRow
@@ -178,7 +199,7 @@ export default function PatientList() {
       </TableCell>
       <TableCell>
         <Typography variant="body2" color="text.secondary">
-          {new Date(patient.createdAt).toLocaleDateString()}
+          {format(new Date(patient.createdAt), 'dd MMM yyyy')}
         </Typography>
       </TableCell>
     </TableRow>
@@ -186,7 +207,7 @@ export default function PatientList() {
 
   return (
     <Box sx={{ height: 'calc(100vh - 112px)', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-      {/* Sticky header */}
+      {/* Page header — not sticky, just above table */}
       <Box
         component={motion.div}
         initial={{ opacity: 0, y: -10 }}
@@ -213,24 +234,11 @@ export default function PatientList() {
         </Box>
 
         <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
-          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-            <TextField
-              label="From"
-              type="date"
-              value={dateFrom}
-              onChange={(e) => { setDateFrom(e.target.value); setPage(0); }}
-              slotProps={{ inputLabel: { shrink: true } }}
-              sx={{ width: 160 }}
-            />
-            <TextField
-              label="To"
-              type="date"
-              value={dateTo}
-              onChange={(e) => { setDateTo(e.target.value); setPage(0); }}
-              slotProps={{ inputLabel: { shrink: true } }}
-              sx={{ width: 160 }}
-            />
-          </Box>
+          <DateRangePickerInput
+            startDate={dateFrom}
+            endDate={dateTo}
+            onApply={(s, e) => { setDateFrom(s); setDateTo(e); setPage(0); }}
+          />
           <Button
             variant="contained"
             startIcon={<PersonAddIcon />}
@@ -242,92 +250,92 @@ export default function PatientList() {
         </Box>
       </Box>
 
-      {/* Scrollable table area — only this scrolls, not the page */}
+      {/* Scrollable table area — only this scrolls, column header stays fixed */}
       <Paper sx={{ borderRadius: 3, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        <Box sx={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
-          {isLoading ? (
-            <TableContainer>
-              <Table stickyHeader>
-                <TableHead>
-                  <TableRow sx={{ '& th': { bgcolor: '#0D7C66 !important' } }}>
-                    <TableCell sx={HEADER_CELL_SX}>UHID</TableCell>
-                    <TableCell sx={HEADER_CELL_SX}>Name</TableCell>
-                    <TableCell sx={HEADER_CELL_SX}>Age / Gender</TableCell>
-                    <TableCell sx={HEADER_CELL_SX}>Phone</TableCell>
-                    <TableCell sx={HEADER_CELL_SX}>Blood Group</TableCell>
-                    <TableCell sx={HEADER_CELL_SX}>Tags</TableCell>
-                    <TableCell sx={HEADER_CELL_SX}>Registered On</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody><SkeletonRows /></TableBody>
-              </Table>
-            </TableContainer>
-          ) : grouped.length === 0 ? (
-            <Box sx={{ py: 6, textAlign: 'center' }}>
-              <Typography color="text.secondary">
-                No patients found for the selected date range.
-              </Typography>
-            </Box>
-          ) : (
-            grouped.map(([day, dayPatients]) => (
-              <Accordion
-                key={day}
-                expanded={currentExpanded === day}
-                onChange={(_, isOpen) => setExpandedDay(isOpen ? day : null)}
-                disableGutters
-                elevation={0}
-                square
-                sx={{
-                  '&:before': { display: 'none' },
-                  borderBottom: '1px solid',
-                  borderColor: 'divider',
-                }}
-              >
-                <AccordionSummary
-                  expandIcon={<ExpandMoreIcon />}
-                  sx={{
-                    bgcolor: 'action.hover',
-                    minHeight: 48,
-                    '&.Mui-expanded': { minHeight: 48 },
-                    '& .MuiAccordionSummary-content': { my: 0.75 },
-                    '& .MuiAccordionSummary-content.Mui-expanded': { my: 0.75 },
-                  }}
-                >
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                    <Typography variant="subtitle2" fontWeight={700}>
-                      {formatGroupDate(day)}
+        <TableContainer sx={{ flex: 1, minHeight: 0 }}>
+          <Table stickyHeader size="small" sx={{ tableLayout: 'fixed' }}>
+            <colgroup>
+              <col style={{ width: COL_WIDTHS.uhid }} />
+              <col style={{ width: COL_WIDTHS.name }} />
+              <col style={{ width: COL_WIDTHS.age }} />
+              <col style={{ width: COL_WIDTHS.phone }} />
+              <col style={{ width: COL_WIDTHS.blood }} />
+              <col style={{ width: COL_WIDTHS.tags }} />
+              <col style={{ width: COL_WIDTHS.regOn }} />
+            </colgroup>
+            <TableHead>
+              <TableRow>
+                <TableCell sx={HEADER_CELL_SX}>UHID</TableCell>
+                <TableCell sx={HEADER_CELL_SX}>Name</TableCell>
+                <TableCell sx={HEADER_CELL_SX}>Age / Gender</TableCell>
+                <TableCell sx={HEADER_CELL_SX}>Phone</TableCell>
+                <TableCell sx={HEADER_CELL_SX}>Blood Group</TableCell>
+                <TableCell sx={HEADER_CELL_SX}>Tags</TableCell>
+                <TableCell sx={HEADER_CELL_SX}>Registered On</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {isLoading ? (
+                <SkeletonRows />
+              ) : grouped.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7} sx={{ py: 6, textAlign: 'center', borderBottom: 'none' }}>
+                    <Typography color="text.secondary">
+                      No patients found for the selected date range.
                     </Typography>
-                    <Badge
-                      badgeContent={dayPatients.length}
-                      color="primary"
-                      sx={{ '& .MuiBadge-badge': { position: 'static', transform: 'none' } }}
-                    />
-                  </Box>
-                </AccordionSummary>
-                <AccordionDetails sx={{ p: 0 }}>
-                  <TableContainer>
-                    <Table size="small">
-                      <TableHead>
-                        <TableRow sx={{ '& th': { bgcolor: '#0D7C66 !important' } }}>
-                          <TableCell sx={HEADER_CELL_SX}>UHID</TableCell>
-                          <TableCell sx={HEADER_CELL_SX}>Name</TableCell>
-                          <TableCell sx={HEADER_CELL_SX}>Age / Gender</TableCell>
-                          <TableCell sx={HEADER_CELL_SX}>Phone</TableCell>
-                          <TableCell sx={HEADER_CELL_SX}>Blood Group</TableCell>
-                          <TableCell sx={HEADER_CELL_SX}>Tags</TableCell>
-                          <TableCell sx={HEADER_CELL_SX}>Registered On</TableCell>
-                        </TableRow>
-                      </TableHead>
-                      <TableBody>
-                        {dayPatients.map(renderRow)}
-                      </TableBody>
-                    </Table>
-                  </TableContainer>
-                </AccordionDetails>
-              </Accordion>
-            ))
-          )}
-        </Box>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                grouped.map(([day, dayPatients]) => {
+                  const isOpen = !!openGroups[day];
+                  return (
+                  <Fragment key={day}>
+                    <TableRow
+                      hover
+                      onClick={() => toggleGroup(day)}
+                      sx={{
+                        bgcolor: 'action.hover',
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                      }}
+                    >
+                      <TableCell
+                        colSpan={7}
+                        sx={{
+                          py: 1,
+                          borderBottom: '1px solid',
+                          borderColor: 'divider',
+                        }}
+                      >
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                          <KeyboardArrowDownIcon
+                            fontSize="small"
+                            sx={{
+                              color: 'text.secondary',
+                              transition: 'transform 0.2s ease',
+                              transform: isOpen ? 'rotate(0deg)' : 'rotate(-90deg)',
+                            }}
+                          />
+                          <Typography variant="subtitle2" fontWeight={700}>
+                            Register Date: {formatGroupDate(day)}
+                          </Typography>
+                          <Chip
+                            label={dayPatients.length}
+                            size="small"
+                            color="primary"
+                            sx={{ height: 20, fontSize: 11, fontWeight: 600 }}
+                          />
+                        </Box>
+                      </TableCell>
+                    </TableRow>
+                    {isOpen && dayPatients.map(renderRow)}
+                  </Fragment>
+                  );
+                })
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
 
         <TablePagination
           component="div"

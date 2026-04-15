@@ -197,7 +197,7 @@ export const patientApi = {
 // ─── Queue API ───────────────────────────────────────────────────────
 
 export const queueApi = {
-  getQueue: (params: { organizationId: string; branchId: string; date: string }) =>
+  getQueue: (params: { organizationId: string; branchId: string; date?: string; dateFrom?: string; dateTo?: string }) =>
     api.get<ApiResponse<{ queue: QueueEntry[] }>>('/queue', { params }).then((r) => r.data),
 
   addToQueue: (entry: Record<string, unknown>) =>
@@ -445,6 +445,24 @@ export const whatsappApi = {
         '/upload-prescription-pdf',
         payload,
       )
+      .then((r) => r.data),
+};
+
+// ─── Places API (Google Places Autocomplete proxy) ────────────────────
+
+export interface PlacePrediction {
+  placeId: string;
+  description: string;
+  mainText: string;
+  secondaryText: string;
+}
+
+export const placesApi = {
+  autocomplete: (input: string, country = 'in') =>
+    api
+      .get<ApiResponse<{ predictions: PlacePrediction[] }>>('/places/autocomplete', {
+        params: { input, country },
+      })
       .then((r) => r.data),
 };
 

@@ -28,11 +28,15 @@ import {
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import debounce from 'lodash.debounce';
+import { format, isValid } from 'date-fns';
+import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
+import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { patientApi, appointmentApi, queueApi, invoiceApi, paymentApi } from '@/services/api';
 import { useAuth } from '@/context/AuthContext';
 import type { Patient, TimeSlot, ServiceDetail, SelectedService, PaymentSummary } from '@/types';
 import ServiceSelection from './ServiceSelection';
 import RegisterPatientDialog from '@/pages/Patients/components/RegisterPatientDialog';
+import { useCurrentDate } from '@/hooks/useCurrentDate';
 
 type BookingMode = 'checkin' | 'appointment';
 
@@ -66,7 +70,9 @@ export default function BookingPanel({
   const [bookingMode, setBookingMode] = useState<BookingMode>('checkin');
   const [registerDialogOpen, setRegisterDialogOpen] = useState(false);
 
-  const isBookingToday = bookingDate === new Date().toISOString().split('T')[0];
+  const todayStr = useCurrentDate();
+  const isBookingToday = bookingDate === todayStr;
+  const isBookingPast = bookingDate < todayStr;
 
   // Auto-switch mode when date changes
   useEffect(() => {
@@ -198,6 +204,10 @@ export default function BookingPanel({
 
   // Walk-in check-in: directly adds patient to today's queue
   const handleCheckin = async () => {
+    if (isBookingPast) {
+      toast.error('Cannot check in on a past date — dates before today are read-only');
+      return;
+    }
     if (!selectedPatient) {
       toast.error('Please select a patient');
       return;
@@ -264,6 +274,7 @@ export default function BookingPanel({
 
       // Invalidate caches
       queryClient.invalidateQueries({ queryKey: ['queue'] });
+      queryClient.invalidateQueries({ queryKey: ['queue-range'] });
       queryClient.invalidateQueries({ queryKey: ['payments'] });
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
 
@@ -283,6 +294,10 @@ export default function BookingPanel({
 
   // Scheduled appointment: creates appointment + queue entry
   const handleBookAppointment = async () => {
+    if (isBookingPast) {
+      toast.error('Cannot book on a past date — dates before today are read-only');
+      return;
+    }
     if (!selectedPatient) {
       toast.error('Please select a patient');
       return;
@@ -350,6 +365,7 @@ export default function BookingPanel({
 
       // Invalidate all relevant caches
       queryClient.invalidateQueries({ queryKey: ['queue'] });
+      queryClient.invalidateQueries({ queryKey: ['queue-range'] });
       queryClient.invalidateQueries({ queryKey: ['appointments'] });
       queryClient.invalidateQueries({ queryKey: ['slots'] });
       queryClient.invalidateQueries({ queryKey: ['payments'] });
@@ -385,11 +401,23 @@ export default function BookingPanel({
   };
 
   const isCheckinMode = bookingMode === 'checkin';
-  const canSubmit = isCheckinMode
-    ? !isSubmitting && !!selectedPatient
-    : !isSubmitting && !!selectedPatient && !!selectedSlot;
+
+  // Live clock for check-in mode (updates every 30s).
+  const [nowTick, setNowTick] = useState(() => new Date());
+  useEffect(() => {
+    if (!open || !isCheckinMode) return;
+    const t = setInterval(() => setNowTick(new Date()), 30_000);
+    return () => clearInterval(t);
+  }, [open, isCheckinMode]);
+  const currentTimeLabel = format(nowTick, 'hh:mm a');
+  const canSubmit = isBookingPast
+    ? false
+    : isCheckinMode
+      ? !isSubmitting && !!selectedPatient
+      : !isSubmitting && !!selectedPatient && !!selectedSlot;
 
   const getSubmitLabel = () => {
+    if (isBookingPast) return 'Past date — read only';
     if (isSubmitting) return isCheckinMode ? 'Checking in...' : 'Booking...';
     if (paymentSummary && paymentSummary.totalPaid > 0) {
       return isCheckinMode
@@ -405,6 +433,7 @@ export default function BookingPanel({
   };
 
   return (
+    <LocalizationProvider dateAdapter={AdapterDateFns}>
     <Drawer
       anchor="right"
       open={open}
@@ -427,6 +456,26 @@ export default function BookingPanel({
       {/* Scrollable content */}
       <Box sx={{ flex: 1, overflow: 'auto', px: 3, py: 2.5 }}>
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+        {isBookingPast && (
+          <Paper
+            variant="outlined"
+            sx={{
+              p: 1.5,
+              borderColor: 'error.light',
+              bgcolor: (t) => alpha(t.palette.error.main, 0.06),
+              borderRadius: 2,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+            }}
+          >
+            <PastIcon fontSize="small" color="error" />
+            <Typography variant="body2" color="error.dark" fontWeight={600}>
+              This date is in the past — booking and check-in are disabled. You can only view the queue.
+            </Typography>
+          </Paper>
+        )}
+
         {/* Booking mode toggle (only show when booking for today) */}
         {isBookingToday && (
           <Box>
@@ -560,16 +609,31 @@ export default function BookingPanel({
         />
 
         {/* Date picker */}
-        <TextField
-          label={isCheckinMode ? 'Check-in Date' : 'Appointment Date'}
-          type="date"
-          value={bookingDate}
-          onChange={(e) => {
-            setBookingDate(e.target.value);
-            setSelectedSlot('');
-          }}
-          slotProps={{ inputLabel: { shrink: true } }}
-        />
+        <Box>
+          <DatePicker
+            label={isCheckinMode ? 'Check-in Date' : 'Appointment Date'}
+            value={bookingDate ? new Date(bookingDate + 'T00:00:00') : null}
+            format="dd/MM/yyyy"
+            onChange={(newVal) => {
+              if (!newVal || !isValid(newVal)) {
+                setBookingDate('');
+                setSelectedSlot('');
+                return;
+              }
+              setBookingDate(format(newVal, 'yyyy-MM-dd'));
+              setSelectedSlot('');
+            }}
+            slotProps={{ textField: { size: 'small', fullWidth: true } }}
+          />
+          {isCheckinMode && (
+            <Typography
+              variant="caption"
+              sx={{ display: 'block', mt: 0.5, color: 'text.secondary', fontWeight: 600 }}
+            >
+              Current time: {currentTimeLabel}
+            </Typography>
+          )}
+        </Box>
 
         {/* Slot duration + Time slots — only for appointment mode */}
         {!isCheckinMode && (
@@ -800,5 +864,6 @@ export default function BookingPanel({
         initialPhone={/^\d{10}$/.test(searchTerm.trim()) ? searchTerm.trim() : undefined}
       />
     </Drawer>
+    </LocalizationProvider>
   );
 }

@@ -3,6 +3,9 @@ import {
   Chip, Stack,
 } from '@mui/material';
 import EventIcon from '@mui/icons-material/Event';
+import { format, isValid } from 'date-fns';
+import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
+import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import SectionHeader from '../components/SectionHeader';
 import { usePrescription } from '../context/PrescriptionContext';
 
@@ -29,6 +32,7 @@ export default function FollowUpSection() {
   };
 
   return (
+    <LocalizationProvider dateAdapter={AdapterDateFns}>
     <SectionHeader id="followUp" title="Follow-Up" icon={<EventIcon />} itemCount={followUp ? 1 : 0}>
       <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
         <Typography variant="body2" color="text.secondary" sx={{ alignSelf: 'center' }}>Quick set:</Typography>
@@ -45,18 +49,24 @@ export default function FollowUpSection() {
       </Stack>
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, sm: 4 }}>
-          <TextField
+          <DatePicker
             label="Follow-Up Date"
-            type="date"
-            value={followUp?.followUpDate || ''}
-            onChange={e => setFollowUp({
-              followUpDate: e.target.value,
-              date: e.target.value,
-              notes: followUp?.notes || '',
-              notificationEnabled: followUp?.notificationEnabled ?? true,
-            })}
-            size="small" fullWidth
-            slotProps={{ inputLabel: { shrink: true } }}
+            format="dd/MM/yyyy"
+            value={followUp?.followUpDate ? new Date(followUp.followUpDate + 'T00:00:00') : null}
+            onChange={(newVal) => {
+              if (!newVal || !isValid(newVal)) {
+                setFollowUp(null);
+                return;
+              }
+              const iso = format(newVal, 'yyyy-MM-dd');
+              setFollowUp({
+                followUpDate: iso,
+                date: iso,
+                notes: followUp?.notes || '',
+                notificationEnabled: followUp?.notificationEnabled ?? true,
+              });
+            }}
+            slotProps={{ textField: { size: 'small', fullWidth: true } }}
           />
         </Grid>
         <Grid size={{ xs: 12, sm: 6 }}>
@@ -85,5 +95,6 @@ export default function FollowUpSection() {
         </Button>
       )}
     </SectionHeader>
+    </LocalizationProvider>
   );
 }

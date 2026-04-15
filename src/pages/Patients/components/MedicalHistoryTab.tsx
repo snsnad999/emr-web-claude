@@ -40,6 +40,7 @@ import {
 } from '@mui/icons-material';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { format } from 'date-fns';
 import { patientApi } from '@/services/api';
 import type { PatientMedicalHistory } from '@/types';
 
@@ -521,7 +522,7 @@ export default function MedicalHistoryTab({ patientId }: MedicalHistoryTabProps)
                         <TableCell>{surgery.procedure}</TableCell>
                         <TableCell>
                           <Typography variant="body2" color="text.secondary">
-                            {surgery.date ? new Date(surgery.date).toLocaleDateString() : '-'}
+                            {surgery.date ? format(new Date(surgery.date), 'dd MMM yyyy') : '-'}
                           </Typography>
                         </TableCell>
                         <TableCell>

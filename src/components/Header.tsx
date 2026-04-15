@@ -8,7 +8,6 @@ import {
   Box,
   Breadcrumbs,
   Link,
-  Badge,
   Autocomplete,
   TextField,
   CircularProgress,
@@ -16,7 +15,6 @@ import {
   useTheme,
 } from '@mui/material';
 import {
-  Notifications as NotificationsIcon,
   Search as SearchIcon,
   Menu as MenuIcon,
   NavigateNext as NavigateNextIcon,
@@ -32,25 +30,23 @@ import type { Patient } from '@/types';
 import RegisterPatientDialog from '@/pages/Patients/components/RegisterPatientDialog';
 
 const breadcrumbMap: Record<string, string> = {
-  '/': 'Queue',
+  '/': 'Queue Dashboard',
   '/patients': 'Patients',
   '/patient': 'Patient Detail',
   '/visit-details': 'Prescription',
   '/prescription-final': 'Prescription Summary',
   '/analytics': 'Analytics',
   '/payments': 'Payments',
+  '/profile': 'Profile',
 };
 
 function getBreadcrumbs(pathname: string): Array<{ label: string; path: string }> {
-  const crumbs: Array<{ label: string; path: string }> = [{ label: 'Queue', path: '/' }];
-
-  if (pathname === '/') return crumbs;
-
+  if (pathname === '/') {
+    return [{ label: 'Queue Dashboard', path: '/' }];
+  }
   const basePath = '/' + pathname.split('/')[1];
   const label = breadcrumbMap[basePath] ?? basePath.replace('/', '').replace(/-/g, ' ');
-  crumbs.push({ label: label.charAt(0).toUpperCase() + label.slice(1), path: pathname });
-
-  return crumbs;
+  return [{ label: label.charAt(0).toUpperCase() + label.slice(1), path: pathname }];
 }
 
 export default function Header() {
@@ -288,23 +284,6 @@ export default function Header() {
             }}
           />
         )}
-
-        {/* Notifications */}
-        <IconButton sx={{ color: 'text.secondary', '&:hover': { color: 'text.primary' } }}>
-          <Badge
-            badgeContent={0}
-            color="error"
-            sx={{
-              '& .MuiBadge-badge': {
-                fontSize: '0.65rem',
-                minWidth: 16,
-                height: 16,
-              },
-            }}
-          >
-            <NotificationsIcon />
-          </Badge>
-        </IconButton>
 
       </Toolbar>
 

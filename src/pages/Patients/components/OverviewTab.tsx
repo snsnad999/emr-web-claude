@@ -10,6 +10,7 @@ import {
   Phone as PhoneIcon,
   Home as HomeIcon,
 } from '@mui/icons-material';
+import { format } from 'date-fns';
 import type { Patient } from '@/types';
 
 function InfoRow({ label, value }: { label: string; value: string | undefined }) {
@@ -58,13 +59,13 @@ export default function OverviewTab({ patient }: OverviewTabProps) {
           <InfoRow label="Gender" value={genderLabel(patient.gender)} />
           <InfoRow
             label="Date of Birth"
-            value={patient.dateOfBirth ? new Date(patient.dateOfBirth).toLocaleDateString() : undefined}
+            value={patient.dateOfBirth ? format(new Date(patient.dateOfBirth), 'dd MMM yyyy') : undefined}
           />
           <InfoRow label="Age" value={patient.age ? `${patient.age} years` : undefined} />
           <InfoRow label="Blood Group" value={patient.bloodGroup} />
           <InfoRow
             label="Registered On"
-            value={patient.createdAt ? new Date(patient.createdAt).toLocaleDateString() : undefined}
+            value={patient.createdAt ? format(new Date(patient.createdAt), 'dd MMM yyyy') : undefined}
           />
         </Paper>
       </Grid>

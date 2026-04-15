@@ -16,6 +16,7 @@ import {
   CurrencyRupee as RupeeIcon,
 } from '@mui/icons-material';
 import { useQuery } from '@tanstack/react-query';
+import { format } from 'date-fns';
 import { paymentApi } from '@/services/api';
 import { useAuth } from '@/context/AuthContext';
 import type { Payment } from '@/types';
@@ -127,7 +128,7 @@ export default function BillingTab({ patientId: _patientId }: BillingTabProps) {
                 <TableRow key={payment.paymentId} hover>
                   <TableCell>
                     <Typography variant="body2" fontWeight={500}>
-                      {new Date(payment.collectedAt).toLocaleDateString()}
+                      {format(new Date(payment.collectedAt), 'dd MMM yyyy')}
                     </Typography>
                   </TableCell>
                   <TableCell>

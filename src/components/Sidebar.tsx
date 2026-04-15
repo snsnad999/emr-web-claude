@@ -34,7 +34,7 @@ import {
   ChevronLeft as ChevronLeftIcon,
   LocalHospital as ClinicIcon,
 } from '@mui/icons-material';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { useAuth } from '@/context/AuthContext';
 import { useAppContext } from '@/context/AppContext';
 
@@ -115,41 +115,13 @@ export default function Sidebar() {
       >
         {sidebarOpen ? (
           <>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', flex: 1, minWidth: 0 }}>
               <Box
-                sx={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: '10px',
-                  background: 'linear-gradient(135deg, #0D7C66 0%, #17B890 100%)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0,
-                }}
-              >
-                <ClinicIcon sx={{ color: '#fff', fontSize: 20 }} />
-              </Box>
-              <AnimatePresence>
-                <MotionBox
-                  initial={{ opacity: 0, x: -8 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -8 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  <Typography
-                    variant="subtitle1"
-                    fontWeight={700}
-                    sx={{ color: 'primary.dark', lineHeight: 1.2 }}
-                    noWrap
-                  >
-                    EMR Healthcare
-                  </Typography>
-                  <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.65rem' }}>
-                    Medical Records
-                  </Typography>
-                </MotionBox>
-              </AnimatePresence>
+                component="img"
+                src="/Logo_Black_AQ%201.png"
+                alt="AgentQure"
+                sx={{ height: 40, maxWidth: '100%', objectFit: 'contain' }}
+              />
             </Box>
             <IconButton
               size="small"

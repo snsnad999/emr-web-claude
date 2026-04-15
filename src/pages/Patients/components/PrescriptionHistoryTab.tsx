@@ -28,6 +28,7 @@ import {
 } from '@mui/icons-material';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
+import { format } from 'date-fns';
 import { prescriptionApi } from '@/services/api';
 import type { Prescription, Patient } from '@/types';
 import PatientPrescriptionPDF from './PatientPrescriptionPDF';
@@ -181,7 +182,7 @@ export default function PrescriptionHistoryTab({ patientId, patient }: Prescript
               <TableRow key={rx.prescriptionId} hover>
                 <TableCell>
                   <Typography variant="body2" fontWeight={500}>
-                    {new Date(rx.visitDate || rx.createdAt).toLocaleDateString()}
+                    {format(new Date(rx.visitDate || rx.createdAt), 'dd MMM yyyy')}
                   </Typography>
                 </TableCell>
                 <TableCell>
@@ -215,7 +216,7 @@ export default function PrescriptionHistoryTab({ patientId, patient }: Prescript
                 <TableCell>
                   {rx.followUp?.followUpDate ? (
                     <Chip
-                      label={new Date(rx.followUp.followUpDate).toLocaleDateString()}
+                      label={format(new Date(rx.followUp.followUpDate), 'dd MMM yyyy')}
                       size="small"
                       color="info"
                       variant="outlined"

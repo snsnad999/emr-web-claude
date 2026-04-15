@@ -15,7 +15,6 @@ import {
 import {
   Visibility,
   VisibilityOff,
-  LocalHospital as ClinicIcon,
   Person as PersonIcon,
   Lock as LockIcon,
 } from '@mui/icons-material';
@@ -105,22 +104,11 @@ export default function Login() {
         <CardContent sx={{ p: { xs: 4, sm: 5 } }}>
           <Box sx={{ textAlign: 'center', mb: 4 }}>
             <Box
-              sx={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: 56,
-                height: 56,
-                borderRadius: '50%',
-                background: 'linear-gradient(135deg, #1565C0 0%, #42A5F5 100%)',
-                mb: 2,
-              }}
-            >
-              <ClinicIcon sx={{ color: '#fff', fontSize: 28 }} />
-            </Box>
-            <Typography variant="h4" fontWeight={700} color="primary.dark">
-              EMR Application
-            </Typography>
+              component="img"
+              src="/Logo_Black_AQ%201.png"
+              alt="AgentQure"
+              sx={{ height: 64, maxWidth: '80%', objectFit: 'contain', mb: 1.5 }}
+            />
             <Typography variant="body2" color="text.secondary" mt={0.5}>
               Sign in to your account
             </Typography>

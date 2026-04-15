@@ -13,6 +13,7 @@ import {
 } from '@mui/material';
 import { EventNote as EventIcon } from '@mui/icons-material';
 import { useQuery } from '@tanstack/react-query';
+import { format } from 'date-fns';
 import { appointmentApi } from '@/services/api';
 import { useAuth } from '@/context/AuthContext';
 import type { Appointment, AppointmentStatus } from '@/types';
@@ -72,7 +73,7 @@ function AppointmentTable({ appointments, emptyText }: { appointments: Appointme
             <TableRow key={appt.appointmentId} hover>
               <TableCell>
                 <Typography variant="body2" fontWeight={500}>
-                  {new Date(appt.slotDate || appt.createdAt).toLocaleDateString()}
+                  {format(new Date(appt.slotDate || appt.createdAt), 'dd MMM yyyy')}
                 </Typography>
               </TableCell>
               <TableCell>

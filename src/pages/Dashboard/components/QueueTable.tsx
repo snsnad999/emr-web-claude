@@ -54,6 +54,14 @@ const appointmentTypeConfig: Record<AppointmentType, { label: string; color: 'su
   followup: { label: 'Follow-up', color: 'secondary', icon: FollowUpIcon },
 };
 
+const HEADER_CELL_SX = {
+  fontWeight: 600,
+  color: '#fff',
+  bgcolor: '#0D7C66',
+  borderBottom: '2px solid',
+  borderColor: 'divider',
+};
+
 function SkeletonRows() {
   return (
     <>
@@ -94,21 +102,20 @@ export default function QueueTable({ queue, isLoading, onUpdateStatus }: QueueTa
   const navigate = useNavigate();
 
   return (
-    <TableContainer component={Paper} sx={{ borderRadius: 3 }}>
-      <Table>
+    <Paper sx={{ borderRadius: 3, overflow: 'hidden' }}>
+      <TableContainer>
+      <Table size="small" stickyHeader>
         <TableHead>
-          <TableRow sx={{ bgcolor: '#0D7C66' }}>
-            <TableCell sx={{ fontWeight: 600, color: '#fff', borderBottom: '2px solid', borderColor: 'divider' }}>Token #</TableCell>
-            <TableCell sx={{ fontWeight: 600, color: '#fff', borderBottom: '2px solid', borderColor: 'divider' }}>Patient Name</TableCell>
-            <TableCell sx={{ fontWeight: 600, color: '#fff', borderBottom: '2px solid', borderColor: 'divider' }}>UHID</TableCell>
-            <TableCell sx={{ fontWeight: 600, color: '#fff', borderBottom: '2px solid', borderColor: 'divider' }}>Type</TableCell>
-            <TableCell sx={{ fontWeight: 600, color: '#fff', borderBottom: '2px solid', borderColor: 'divider' }}>Time Slot</TableCell>
-            <TableCell sx={{ fontWeight: 600, color: '#fff', borderBottom: '2px solid', borderColor: 'divider' }}>Services</TableCell>
-            <TableCell sx={{ fontWeight: 600, color: '#fff', borderBottom: '2px solid', borderColor: 'divider' }}>Status</TableCell>
-            <TableCell sx={{ fontWeight: 600, color: '#fff', borderBottom: '2px solid', borderColor: 'divider' }}>Payment</TableCell>
-            <TableCell sx={{ fontWeight: 600, color: '#fff', borderBottom: '2px solid', borderColor: 'divider' }} align="right">
-              Actions
-            </TableCell>
+          <TableRow>
+            <TableCell sx={HEADER_CELL_SX}>Token #</TableCell>
+            <TableCell sx={HEADER_CELL_SX}>Patient Name</TableCell>
+            <TableCell sx={HEADER_CELL_SX}>UHID</TableCell>
+            <TableCell sx={HEADER_CELL_SX}>Type</TableCell>
+            <TableCell sx={HEADER_CELL_SX}>Time Slot</TableCell>
+            <TableCell sx={HEADER_CELL_SX}>Services</TableCell>
+            <TableCell sx={HEADER_CELL_SX}>Status</TableCell>
+            <TableCell sx={HEADER_CELL_SX}>Payment</TableCell>
+            <TableCell sx={HEADER_CELL_SX} align="right">Actions</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
@@ -297,6 +304,7 @@ export default function QueueTable({ queue, isLoading, onUpdateStatus }: QueueTa
           )}
         </TableBody>
       </Table>
-    </TableContainer>
+      </TableContainer>
+    </Paper>
   );
 }
