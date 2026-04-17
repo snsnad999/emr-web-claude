@@ -94,6 +94,15 @@ export default function BookingPanel({
     }
   }, [open, preselectedSlot]);
 
+  // Apply preselected patient when provided (e.g., from RegisterPatientDialog)
+  useEffect(() => {
+    if (open && preselectedPatient) {
+      setSelectedPatient(preselectedPatient);
+      setSearchTerm('');
+      setDebouncedSearch('');
+    }
+  }, [open, preselectedPatient]);
+
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const debouncedSetSearch = useCallback(
     debounce((val: string) => setDebouncedSearch(val), 300),

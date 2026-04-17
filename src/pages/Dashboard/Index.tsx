@@ -28,7 +28,9 @@ import WeekCalendarView from './components/WeekCalendarView';
 import MonthCalendarView from './components/MonthCalendarView';
 
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { startOfWeek, addDays, startOfMonth, endOfMonth, endOfWeek, format } from 'date-fns';
+import type { Patient } from '@/types';
 
 type ViewMode = 'queue' | 'day' | 'week' | 'month';
 
@@ -43,6 +45,25 @@ export default function QueueDashboard() {
   const [bookingOpen, setBookingOpen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('queue');
   const [preselectedSlot, setPreselectedSlot] = useState<string | undefined>(undefined);
+  const [preselectedPatient, setPreselectedPatient] = useState<Patient | null>(null);
+
+  // Receive {openBooking, patient} from RegisterPatientDialog navigation
+  const location = useLocation();
+  const navigate = useNavigate();
+  useEffect(() => {
+    const state = location.state as { openBooking?: 'queue' | 'appointment'; patient?: Patient } | null;
+    if (state?.openBooking && state.patient) {
+      setPreselectedPatient(state.patient);
+      if (state.openBooking === 'appointment') {
+        const tomorrow = format(addDays(new Date(), 1), 'yyyy-MM-dd');
+        dispatch(setSelectedDate(tomorrow));
+      } else {
+        dispatch(setSelectedDate(todayStr));
+      }
+      setBookingOpen(true);
+      navigate(location.pathname, { replace: true, state: null });
+    }
+  }, [location, dispatch, navigate, todayStr]);
 
   // Auto-advance selectedDate at midnight: when the local day rolls over,
   // if the user was sitting on the previous "today", move them to the new today.
@@ -148,6 +169,7 @@ export default function QueueDashboard() {
   const handleBookingClose = useCallback(() => {
     setBookingOpen(false);
     setPreselectedSlot(undefined);
+    setPreselectedPatient(null);
   }, []);
 
   return (
@@ -333,6 +355,7 @@ export default function QueueDashboard() {
         onClose={handleBookingClose}
         selectedDate={selectedDate}
         preselectedSlot={preselectedSlot}
+        preselectedPatient={preselectedPatient}
       />
     </Box>
   );

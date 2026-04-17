@@ -30,8 +30,18 @@ import {
 import {
   Person as PersonIcon,
   History as HistoryIcon,
+  CheckCircle as CheckCircleIcon,
+  MedicalServices as MedicalServicesIcon,
+  PlaylistAdd as PlaylistAddIcon,
+  EventAvailable as EventAvailableIcon,
+  People as PeopleIcon,
+  PersonAdd as PersonAddIcon,
+  ReceiptLong as ReceiptLongIcon,
+  ThumbUp as ThumbUpIcon,
+  ThumbDown as ThumbDownIcon,
 } from '@mui/icons-material';
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, type ReactNode } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useForm, Controller } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -96,59 +106,125 @@ const DEFAULT_CONDITIONS: MedicalCondition[] = [
   { name: 'Smoking', value: '-' }, { name: 'Dustel 0.5Mg Tablet', value: '-' },
 ];
 
-// ─── Toggle Pill Sub-component ─────────────────────────────────────
-function TogglePill({ label, active, activeColor, activeFg, onClick }: {
-  label: string; active: boolean; activeColor: string; activeFg?: string; onClick: () => void;
-}) {
-  return (
-    <Box
-      onClick={onClick}
-      sx={{
-        flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-        cursor: 'pointer', fontWeight: 600, fontSize: 12,
-        bgcolor: active ? activeColor : 'transparent',
-        color: active ? (activeFg || '#fff') : '#6b7280',
-        transition: 'all 0.15s', userSelect: 'none',
-        '&:hover': { opacity: 0.85 },
-      }}
-    >
-      {label}
-    </Box>
-  );
-}
-
 // ─── Condition Card Sub-component ──────────────────────────────────
+// Thumbs-up = Yes (green, shows "since" input). Thumbs-down = No (red).
+// Clicking the active button again clears the selection back to neutral.
 function ConditionCard({ condition, index, onValueChange, onSinceChange }: {
   condition: MedicalCondition; index: number;
   onValueChange: (i: number, v: 'Y' | 'N' | '-') => void;
   onSinceChange: (i: number, s: string) => void;
 }) {
-  const borderColor = condition.value === 'Y' ? '#86efac' : condition.value === 'N' ? '#fca5a5' : 'divider';
-  const bgColor = condition.value === 'Y' ? '#f0fdf4' : condition.value === 'N' ? '#fef2f2' : 'background.paper';
+  const isYes = condition.value === 'Y';
+  const isNo = condition.value === 'N';
+
+  const borderColor = isYes ? '#86efac' : isNo ? '#fca5a5' : 'divider';
+  const bgColor = isYes ? '#f0fdf4' : isNo ? '#fef2f2' : 'background.paper';
+
+  const handleYes = () => onValueChange(index, isYes ? '-' : 'Y');
+  const handleNo = () => onValueChange(index, isNo ? '-' : 'N');
 
   return (
-    <Box sx={{ p: 1.5, border: '1px solid', borderColor, borderRadius: 2, bgcolor: bgColor, transition: 'all 0.2s' }}>
-      <Typography variant="body2" fontWeight={600} sx={{ mb: 1, color: '#1f2937', fontSize: 13 }}>
-        {condition.name}
-      </Typography>
-      <Box sx={{ display: 'flex', borderRadius: '9999px', bgcolor: '#f3f4f6', overflow: 'hidden', height: 28 }}>
-        <TogglePill label="Y" active={condition.value === 'Y'} activeColor="#10b981" onClick={() => onValueChange(index, 'Y')} />
-        <TogglePill label="-" active={condition.value === '-'} activeColor="#d1d5db" activeFg="#374151" onClick={() => onValueChange(index, '-')} />
-        <TogglePill label="N" active={condition.value === 'N'} activeColor="#ef4444" onClick={() => onValueChange(index, 'N')} />
+    <Box
+      sx={{
+        p: 1.5,
+        border: '1px solid',
+        borderColor,
+        borderRadius: 2,
+        bgcolor: bgColor,
+        transition: 'all 0.2s',
+      }}
+    >
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Typography
+          variant="body2"
+          fontWeight={600}
+          sx={{ color: '#1f2937', fontSize: 13, flex: 1, minWidth: 0 }}
+          noWrap
+          title={condition.name}
+        >
+          {condition.name}
+        </Typography>
+        <Box sx={{ display: 'flex', gap: 0.75, flexShrink: 0 }}>
+          <Button
+            onClick={handleYes}
+            disableElevation
+            variant={isYes ? 'contained' : 'outlined'}
+            endIcon={<ThumbUpIcon sx={{ fontSize: 18 }} />}
+            aria-label={isYes ? 'Clear yes' : 'Mark yes'}
+            sx={{
+              minWidth: 92,
+              height: 38,
+              px: 1.5,
+              borderRadius: 1.5,
+              textTransform: 'none',
+              fontWeight: 600,
+              fontSize: 13,
+              bgcolor: isYes ? '#10b981' : 'background.paper',
+              borderColor: isYes ? '#10b981' : '#e5e7eb',
+              color: isYes ? '#fff' : '#6b7280',
+              transition: 'all 0.15s ease',
+              '&:hover': {
+                bgcolor: isYes ? '#059669' : '#ecfdf5',
+                borderColor: '#10b981',
+                color: isYes ? '#fff' : '#10b981',
+                transform: 'translateY(-1px)',
+              },
+            }}
+          >
+            Yes
+          </Button>
+          <Button
+            onClick={handleNo}
+            disableElevation
+            variant={isNo ? 'contained' : 'outlined'}
+            endIcon={<ThumbDownIcon sx={{ fontSize: 18 }} />}
+            aria-label={isNo ? 'Clear no' : 'Mark no'}
+            sx={{
+              minWidth: 92,
+              height: 38,
+              px: 1.5,
+              borderRadius: 1.5,
+              textTransform: 'none',
+              fontWeight: 600,
+              fontSize: 13,
+              bgcolor: isNo ? '#ef4444' : 'background.paper',
+              borderColor: isNo ? '#ef4444' : '#e5e7eb',
+              color: isNo ? '#fff' : '#6b7280',
+              transition: 'all 0.15s ease',
+              '&:hover': {
+                bgcolor: isNo ? '#dc2626' : '#fef2f2',
+                borderColor: '#ef4444',
+                color: isNo ? '#fff' : '#ef4444',
+                transform: 'translateY(-1px)',
+              },
+            }}
+          >
+            No
+          </Button>
+        </Box>
       </Box>
-      {condition.value === 'Y' && (
+      <Collapse in={isYes} timeout={200} unmountOnExit>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
-          <Typography variant="caption" sx={{ color: '#6b7280', fontSize: 11, whiteSpace: 'nowrap' }}>Since</Typography>
+          <Typography
+            variant="caption"
+            sx={{ color: '#6b7280', fontSize: 11, whiteSpace: 'nowrap', fontWeight: 500 }}
+          >
+            Since
+          </Typography>
           <TextField
             value={condition.since || ''}
             onChange={(e) => onSinceChange(index, e.target.value)}
             size="small"
-            placeholder="Year"
-            sx={{ '& .MuiInputBase-root': { height: 26, fontSize: 12 } }}
+            placeholder="e.g. 2020"
+            sx={{
+              '& .MuiInputBase-root': { height: 28, fontSize: 12, bgcolor: '#fff' },
+              '& .MuiOutlinedInput-notchedOutline': { borderColor: '#bbf7d0' },
+              '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#86efac' },
+            }}
             fullWidth
           />
         </Box>
-      )}
+      </Collapse>
     </Box>
   );
 }
@@ -172,6 +248,8 @@ function computeAge(dob: string): string {
 export default function RegisterPatientDialog({ open, onClose, initialName, initialPhone }: RegisterPatientDialogProps) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const [createdPatient, setCreatedPatient] = useState<Patient | null>(null);
 
   const {
     control,
@@ -373,13 +451,35 @@ export default function RegisterPatientDialog({ open, onClose, initialName, init
         medicalHistory,
       });
     },
-    onSuccess: () => {
+    onSuccess: (res, variables) => {
       toast.success('Patient registered successfully');
       queryClient.invalidateQueries({ queryKey: ['patients'] });
       queryClient.invalidateQueries({ queryKey: ['patients-search'] });
       queryClient.invalidateQueries({ queryKey: ['header-patient-search'] });
-      reset();
-      onClose();
+      // Backend returns only { patientId, uhid }. Merge with form data so
+      // downstream consumers (BookingPanel, etc.) have name/phone/gender/dob.
+      const ret = (res?.data as Partial<Patient>) ?? {};
+      const merged: Patient = {
+        patientId: ret.patientId ?? '',
+        uhid: ret.uhid ?? '',
+        organizationId: user?.organizationId ?? '',
+        branchId: user?.branchId ?? '',
+        salutation: variables.salutation as Patient['salutation'],
+        name: variables.name,
+        gender: variables.gender,
+        dateOfBirth: variables.dateOfBirth,
+        phone: variables.phone,
+        email: variables.email || undefined,
+        bloodGroup: (variables.bloodGroup as Patient['bloodGroup']) || undefined,
+        address: { street: variables.address ?? '', city: '', state: '', pincode: '' },
+        isActive: true,
+      } as Patient;
+      if (merged.patientId) {
+        setCreatedPatient(merged);
+      } else {
+        reset();
+        onClose();
+      }
     },
     onError: (err: unknown) => {
       const msg =
@@ -405,8 +505,54 @@ export default function RegisterPatientDialog({ open, onClose, initialName, init
 
   const handleClose = () => {
     reset();
+    setCreatedPatient(null);
     setNameSuggestionsOpen(false);
     onClose();
+  };
+
+  // ─── Post-creation action handlers ────────────────────────────────
+  const closeAfterAction = () => {
+    reset();
+    setCreatedPatient(null);
+    setNameSuggestionsOpen(false);
+    onClose();
+  };
+
+  const handleStartVisit = () => {
+    if (!createdPatient) return;
+    closeAfterAction();
+    navigate(`/visit-details/${createdPatient.patientId}`);
+  };
+
+  const handleAddToQueue = () => {
+    if (!createdPatient) return;
+    closeAfterAction();
+    navigate('/', { state: { openBooking: 'queue', patient: createdPatient } });
+  };
+
+  const handleBookAppointment = () => {
+    if (!createdPatient) return;
+    closeAfterAction();
+    navigate('/', { state: { openBooking: 'appointment', patient: createdPatient } });
+  };
+
+  const handleViewAllPatients = () => {
+    closeAfterAction();
+    navigate('/patients');
+  };
+
+  const handleAddAnother = () => {
+    reset();
+    setMedicalConditions(DEFAULT_CONDITIONS.map((c) => ({ ...c })));
+    setNoRelevantHistory(false);
+    setCreatedPatient(null);
+    setNameSuggestionsOpen(false);
+  };
+
+  const handleBillPatient = () => {
+    if (!createdPatient) return;
+    closeAfterAction();
+    navigate('/payments', { state: { patient: createdPatient } });
   };
 
   const phoneTouched = !!touchedFields.phone;
@@ -417,6 +563,19 @@ export default function RegisterPatientDialog({ open, onClose, initialName, init
   return (
     <LocalizationProvider dateAdapter={AdapterDateFns}>
     <Dialog open={open} onClose={handleClose} maxWidth="xl" fullWidth PaperProps={{ sx: { maxWidth: 1320 } }}>
+      {createdPatient ? (
+        <PostRegisterActions
+          patient={createdPatient}
+          onStartVisit={handleStartVisit}
+          onAddToQueue={handleAddToQueue}
+          onBookAppointment={handleBookAppointment}
+          onViewAllPatients={handleViewAllPatients}
+          onAddAnother={handleAddAnother}
+          onBillPatient={handleBillPatient}
+          onClose={handleClose}
+        />
+      ) : (
+      <>
       <DialogTitle>
         <Typography variant="h6" fontWeight={700}>
           Register New Patient
@@ -490,7 +649,20 @@ export default function RegisterPatientDialog({ open, onClose, initialName, init
                                 <PersonIcon sx={{ color: 'text.secondary', fontSize: 20 }} />
                                 <Box sx={{ flex: 1, minWidth: 0 }}>
                                   <Typography variant="body2" fontWeight={600} noWrap>{p.name}</Typography>
-                                  <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                                  <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mt: 0.25 }}>
+                                    {p.uhid && (
+                                      <Chip
+                                        label={p.uhid}
+                                        size="small"
+                                        sx={{
+                                          height: 18,
+                                          fontSize: '0.65rem',
+                                          fontWeight: 600,
+                                          bgcolor: 'primary.main',
+                                          color: 'primary.contrastText',
+                                        }}
+                                      />
+                                    )}
                                     {p.dateOfBirth && <Chip label={computeAge(p.dateOfBirth)} size="small" sx={{ height: 18, fontSize: '0.65rem' }} />}
                                     {p.gender && <Chip label={p.gender === 'M' ? 'Male' : p.gender === 'F' ? 'Female' : 'Other'} size="small" sx={{ height: 18, fontSize: '0.65rem' }} />}
                                     {p.phone && <Chip label={p.phone} size="small" variant="outlined" sx={{ height: 18, fontSize: '0.65rem' }} />}
@@ -859,8 +1031,187 @@ export default function RegisterPatientDialog({ open, onClose, initialName, init
           </Button>
         </DialogActions>
       </form>
+      </>
+      )}
 
     </Dialog>
     </LocalizationProvider>
+  );
+}
+
+// ─── Post-Register Action Selection Screen ──────────────────────────
+interface ActionCardProps {
+  icon: ReactNode;
+  title: string;
+  description: string;
+  color: string;
+  onClick: () => void;
+  primary?: boolean;
+}
+
+function ActionCard({ icon, title, description, color, onClick, primary }: ActionCardProps) {
+  return (
+    <Box
+      onClick={onClick}
+      sx={{
+        position: 'relative',
+        p: 2.5,
+        borderRadius: 2.5,
+        border: '1px solid',
+        borderColor: primary ? color : 'divider',
+        bgcolor: primary ? `${color}10` : 'background.paper',
+        cursor: 'pointer',
+        transition: 'all 0.2s ease',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 1,
+        height: '100%',
+        '&:hover': {
+          borderColor: color,
+          transform: 'translateY(-2px)',
+          boxShadow: `0 8px 24px ${color}25`,
+          bgcolor: `${color}08`,
+        },
+      }}
+    >
+      <Box
+        sx={{
+          width: 44,
+          height: 44,
+          borderRadius: 2,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          bgcolor: `${color}18`,
+          color,
+          mb: 0.5,
+        }}
+      >
+        {icon}
+      </Box>
+      <Typography variant="subtitle1" fontWeight={700} sx={{ color: '#1f2937', fontSize: 15 }}>
+        {title}
+      </Typography>
+      <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: 12.5, lineHeight: 1.4 }}>
+        {description}
+      </Typography>
+    </Box>
+  );
+}
+
+interface PostRegisterActionsProps {
+  patient: Patient;
+  onStartVisit: () => void;
+  onAddToQueue: () => void;
+  onBookAppointment: () => void;
+  onViewAllPatients: () => void;
+  onAddAnother: () => void;
+  onBillPatient: () => void;
+  onClose: () => void;
+}
+
+function PostRegisterActions({
+  patient,
+  onStartVisit,
+  onAddToQueue,
+  onBookAppointment,
+  onViewAllPatients,
+  onAddAnother,
+  onBillPatient,
+  onClose,
+}: PostRegisterActionsProps) {
+  return (
+    <>
+      <DialogContent sx={{ p: { xs: 3, sm: 4 } }}>
+        {/* Success header */}
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', mb: 3 }}>
+          <Box
+            sx={{
+              width: 64,
+              height: 64,
+              borderRadius: '50%',
+              bgcolor: '#d1fae5',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              mb: 1.5,
+            }}
+          >
+            <CheckCircleIcon sx={{ color: '#10b981', fontSize: 36 }} />
+          </Box>
+          <Typography variant="h6" fontWeight={700} sx={{ color: '#1f2937' }}>
+            Patient created successfully
+          </Typography>
+          <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>
+            {patient.name}{patient.uhid ? ` · ${patient.uhid}` : ''}
+            {patient.phone ? ` · ${patient.phone}` : ''}
+          </Typography>
+        </Box>
+
+        <Divider sx={{ mb: 3 }} />
+
+        <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 2, color: '#1f2937' }}>
+          Choose your action
+        </Typography>
+
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' },
+            gap: 2,
+          }}
+        >
+          <ActionCard
+            icon={<MedicalServicesIcon sx={{ fontSize: 24 }} />}
+            title="Start Visit"
+            description="Open prescription pad for this patient"
+            color="#0D7C66"
+            primary
+            onClick={onStartVisit}
+          />
+          <ActionCard
+            icon={<PlaylistAddIcon sx={{ fontSize: 24 }} />}
+            title="Add to Queue"
+            description="Check this patient into today's queue"
+            color="#1976D2"
+            onClick={onAddToQueue}
+          />
+          <ActionCard
+            icon={<EventAvailableIcon sx={{ fontSize: 24 }} />}
+            title="Book Appointment"
+            description="Schedule a future appointment"
+            color="#7c3aed"
+            onClick={onBookAppointment}
+          />
+          <ActionCard
+            icon={<ReceiptLongIcon sx={{ fontSize: 24 }} />}
+            title="Bill Patient"
+            description="Create an invoice or collect payment"
+            color="#ea580c"
+            onClick={onBillPatient}
+          />
+          <ActionCard
+            icon={<PeopleIcon sx={{ fontSize: 24 }} />}
+            title="View All Patients"
+            description="Go back to the patient directory"
+            color="#475569"
+            onClick={onViewAllPatients}
+          />
+          <ActionCard
+            icon={<PersonAddIcon sx={{ fontSize: 24 }} />}
+            title="Add Another Patient"
+            description="Register a new patient right away"
+            color="#0891b2"
+            onClick={onAddAnother}
+          />
+        </Box>
+      </DialogContent>
+
+      <DialogActions sx={{ px: 3, pb: 2.5 }}>
+        <Button onClick={onClose} color="inherit">
+          Close
+        </Button>
+      </DialogActions>
+    </>
   );
 }
